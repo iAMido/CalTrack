@@ -19,10 +19,8 @@ async def insert(table: str, data: dict) -> dict:
 
 async def upsert(table: str, data: dict, on_conflict: str = "") -> dict:
     client = get_client()
-    query = client.table(table).upsert(data)
-    if on_conflict:
-        query = query.on_conflict(on_conflict)
-    result = query.execute()
+    kwargs = {"on_conflict": on_conflict} if on_conflict else {}
+    result = client.table(table).upsert(data, **kwargs).execute()
     return result.data[0] if result.data else {}
 
 
