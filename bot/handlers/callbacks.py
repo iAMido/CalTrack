@@ -5,6 +5,7 @@ from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import ContextTypes
 from bot.utils.config import config
 from bot.services import nutrition as nut_service, personal_foods as pf
+from bot.services.translator import translate
 from bot.services.daily_summary import get_status_text
 from bot.utils.formatters import build_meal_keyboard, format_post_save
 from bot.db import supabase_client as db
@@ -233,7 +234,7 @@ async def handle_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     if update.effective_chat.id not in ALLOWED_CHAT_IDS:
         return
 
-    text = (update.message.text or "").strip()
+    text = await translate((update.message.text or "").strip())
     pending = context.user_data.get("pending_meal")
 
     # --- Manual weight for existing item ---

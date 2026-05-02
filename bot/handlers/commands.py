@@ -9,6 +9,7 @@ from bot.utils.config import config
 from bot.services.daily_summary import get_today_summary_text, get_status_text
 from bot.utils.met_calculator import calculate_calories_burned, pace_to_sec_per_km, format_pace
 from bot.services import nutrition as nut_service
+from bot.services.translator import translate
 from bot.utils.formatters import detect_meal_type
 from bot.db import supabase_client as db
 from bot.db import queries as db_queries
@@ -214,10 +215,13 @@ async def handle_add(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     if not raw:
         await update.message.reply_text(
             "Usage: `/add [meal\\_type] <grams>g <food name>`\n"
-            "Example: `/add lunch 15g olive oil`",
+            "Example: `/add lunch 15g olive oil`\n"
+            "Hebrew also works: `/add צהריים 15 גרם שמן זית`",
             parse_mode="Markdown",
         )
         return
+
+    raw = await translate(raw)
 
     # Parse meal_type (optional first word)
     meal_types = {"breakfast", "lunch", "dinner", "snack"}
