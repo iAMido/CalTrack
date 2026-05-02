@@ -38,6 +38,22 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await _handle_meal_type_change(query, context, data)
     elif data == "add":
         await _handle_add_item(query, context)
+    elif data.startswith("rename:"):
+        await _handle_rename_item(query, context, data)
+
+
+async def _handle_rename_item(query, context, data: str) -> None:
+    pending = context.user_data.get("pending_meal")
+    if not pending:
+        await query.edit_message_text("❌ Session expired. Please send the photo again.")
+        return
+    idx = int(data.split(":")[1])
+    item_name = pending["items"][idx].get("ingredient_name", "item")
+    context.user_data["awaiting_rename_item"] = idx
+    await query.edit_message_text(
+        f"✏️ *Item {idx + 1}* is currently *{item_name}*.\n\nWhat is it actually? Type the correct food name:",
+        parse_mode="Markdown",
+    )
 
 
 async def _handle_add_item(query, context) -> None:
@@ -236,6 +252,40 @@ async def handle_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
     text = await translate((update.message.text or "").strip())
     pending = context.user_data.get("pending_meal")
+
+    # --- Rename existing item ---
+    if "awaiting_rename_item" in context.user_data:
+        idx = context.user_data.pop("awaiting_rename_item")
+        if not pending:
+            await update.message.reply_text("Session expired. Please send the photo again.")
+            return
+        new_name = text.strip()
+        if not new_name:
+            await update.message.reply_text("Please type the food name.")
+            context.user_data["awaiting_rename_item"] = idx
+            return
+
+        # Re-lookup USDA and recalculate
+        fdc_id = nut_service.find_usda_match(new_name)
+        weight = pending["items"][idx]["weight_grams"]
+        ai_fallback = pending["items"][idx].get("ai_fallback")
+        nut = nut_service.calculate_nutrition(fdc_id, weight, ai_fallback)
+
+        pending["items"][idx].update({
+            "ingredient_name": new_name,
+            "ingredient_name_he": new_name,
+            "fdc_id": fdc_id,
+            "ai_fallback": None,
+            **nut,
+        })
+
+        nutrition_map = {
+            item["fdc_id"]: nut_service.calculate_nutrition(item["fdc_id"], item["weight_grams"], item.get("ai_fallback"))
+            for item in pending["items"] if item.get("fdc_id")
+        }
+        msg_text, keyboard = build_meal_keyboard(pending, nutrition_map)
+        await update.message.reply_text(msg_text, reply_markup=keyboard, parse_mode="Markdown")
+        return
 
     # --- Manual weight for existing item ---
     if "awaiting_manual_weight" in context.user_data:

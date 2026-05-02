@@ -70,6 +70,7 @@ def build_meal_keyboard(pending_meal: dict, nutrition_map: dict) -> tuple[str, I
                 label = f"{'✓ ' if w == weight else ''}{w}g"
                 btn_row.append(InlineKeyboardButton(label, callback_data=f"w:{idx}:{w}"))
             btn_row.append(InlineKeyboardButton("✏️", callback_data=f"w:{idx}:m"))
+            btn_row.append(InlineKeyboardButton("🔄", callback_data=f"rename:{idx}"))
             keyboard_rows.append(btn_row)
             lines.append("")
 
