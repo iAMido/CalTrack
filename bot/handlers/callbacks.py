@@ -40,6 +40,8 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await _handle_add_item(query, context)
     elif data.startswith("rename:"):
         await _handle_rename_item(query, context, data)
+    elif data == "noop":
+        pass  # number label button — do nothing
 
 
 async def _handle_rename_item(query, context, data: str) -> None:

@@ -65,7 +65,7 @@ def build_meal_keyboard(pending_meal: dict, nutrition_map: dict) -> tuple[str, I
             lines.append(f"   AI estimate: {ai_weight}g (confidence: {conf_pct}%)")
 
             # Build weight buttons from suggestions
-            btn_row = []
+            btn_row = [InlineKeyboardButton(f"{idx + 1}.", callback_data="noop")]
             for w in suggestions:
                 label = f"{'✓ ' if w == weight else ''}{w}g"
                 btn_row.append(InlineKeyboardButton(label, callback_data=f"w:{idx}:{w}"))
