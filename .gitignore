@@ -1,0 +1,90 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# testing
+/coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+ENV/
+*.egg-info/
+dist/
+*.egg
+.eggs/
+
+# misc
+.DS_Store
+*.pem
+Thumbs.db
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+*.log
+logs/
+
+# env files - NEVER commit these
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env*.local
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# Local assets (stored in Supabase storage)
+*.pdf
+ido mosseri.jpg
+
+# Windows artifacts
+nul
+
+# Data files (large, downloaded separately)
+data/usda_foundation.csv
+data/foundation_food.json
+data/*.json
+data/*.zip
+
+# Supabase local
+.supabase/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
