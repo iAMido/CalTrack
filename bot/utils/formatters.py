@@ -85,7 +85,7 @@ def build_meal_keyboard(pending_meal: dict, nutrition_map: dict) -> tuple[str, I
     ])
     keyboard_rows.append([
         InlineKeyboardButton("🔄 Re-analyze", callback_data="re"),
-        InlineKeyboardButton("📝 Add item", callback_data="add"),
+        InlineKeyboardButton("➕ Missing item?", callback_data="add"),
     ])
 
     return "\n".join(lines), InlineKeyboardMarkup(keyboard_rows)
