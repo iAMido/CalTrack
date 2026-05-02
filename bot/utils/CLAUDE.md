@@ -10,27 +10,42 @@ Stateless helper modules used across handlers, services, and scripts.
 | `formatters.py` | Builds meal confirmation keyboard and all Telegram message text |
 | `met_calculator.py` | MET-based calorie burn for runs when device data unavailable |
 
-## Config Usage
+## config.py — Key Fields
 ```python
-from bot.utils.config import config
-
 config.telegram_bot_token
 config.telegram_allowed_chat_id
+config.allowed_chat_ids           # set with single chat_id
 config.openrouter_api_key
-config.supabase_url / config.supabase_key
-config.user_timezone          # "Asia/Jerusalem"
-config.min_calories_male      # 1500
-config.min_calories_female    # 1200
+config.openrouter_vision_model    # "openai/gpt-4o"
+config.openrouter_coach_model     # "anthropic/claude-sonnet-4-5"
+config.supabase_url
+config.supabase_key               # service_role key
+config.user_timezone              # "Asia/Jerusalem"
+config.min_calories_male          # 1500
+config.min_calories_female        # 1200
 ```
 
-## formatters.py Key Functions
-- `build_meal_keyboard(pending_meal, nutrition_map)` → `(text, InlineKeyboardMarkup)`
-  - Uses `item.get("calories")` directly (not nutrition_map lookup) so AI-fallback calories display correctly
-- `format_post_save(daily)` → post-confirmation message with daily totals
-- `format_daily_summary(date, daily, meals)` → full `/summary` output
-- `detect_meal_type()` → breakfast/lunch/snack/dinner based on local time
+## formatters.py — Meal Keyboard Layout
+Each item renders as:
+```
+*N. food name* (hebrew name)
+   AI estimate: Xg (confidence: Y%)
+[ 50g ][ 100g ][ 150g ][ ✏️ ][ 🔄 ]
+```
+- Weight buttons: from `weight_suggestions` list
+- ✏️ → manual gram entry (`w:{idx}:m`)
+- 🔄 → rename/correct food (`rename:{idx}`)
 
-## MET Values (met_calculator.py)
+Action row:
+```
+[ ✅ Confirm All ][ ❌ Cancel ]
+[ 🔄 Re-analyze  ][ ➕ Missing item? ]
+```
+
+**Important**: `cal = item.get("calories") or nutrition_map.get(fdc_id, {}).get("calories", 0)`
+— reads calories from item directly so AI-fallback foods display correctly (not zero).
+
+## met_calculator.py — MET Values
 | Pace | MET |
 |------|-----|
 | < 5:00/km | 11.0 |
