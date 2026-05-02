@@ -139,11 +139,21 @@ async def get_usda_food(fdc_id: int) -> dict | None:
 
 
 async def get_all_usda_foods() -> list[dict]:
-    """Load all USDA Foundation Foods for the vision prompt."""
+    """Load all USDA foods, paginating past the 1,000-row API limit."""
     client = db.get_client()
-    result = (
-        client.table("usda_foundation")
-        .select("fdc_id,description,food_category")
-        .execute()
-    )
-    return result.data or []
+    all_rows = []
+    page_size = 1000
+    offset = 0
+    while True:
+        result = (
+            client.table("usda_foundation")
+            .select("fdc_id,description,food_category,calories_per_100g,protein_per_100g,carbs_per_100g,fat_per_100g,fiber_per_100g")
+            .range(offset, offset + page_size - 1)
+            .execute()
+        )
+        batch = result.data or []
+        all_rows.extend(batch)
+        if len(batch) < page_size:
+            break
+        offset += page_size
+    return all_rows
