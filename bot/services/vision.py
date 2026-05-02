@@ -121,6 +121,78 @@ async def analyze_meal_photo(
     return items
 
 
+LABEL_SYSTEM_PROMPT = """You are a nutrition label reader. Extract the nutrition facts from this food package label.
+
+RULES:
+1. Find the "per 100g" (or per 100ml) column. If only "per serving" is shown, convert using the serving size.
+2. Extract: food_name, calories, protein, carbs, fat, fiber, sodium per 100g.
+3. fiber and sodium may be 0 if not listed.
+4. Return ONLY a single JSON object. No explanations, no markdown, no code blocks.
+
+OUTPUT FORMAT:
+{
+  "food_name": "Greek Yogurt",
+  "food_name_he": "יוגורט יווני",
+  "calories_per_100g": 59,
+  "protein_per_100g": 10.0,
+  "carbs_per_100g": 3.6,
+  "fat_per_100g": 0.4,
+  "fiber_per_100g": 0.0,
+  "sodium_mg_per_100g": 36
+}"""
+
+
+async def extract_nutrition_label(image_bytes: bytes) -> dict:
+    """
+    Extract nutrition facts from a label photo.
+    Returns a dict with food_name + macros per 100g.
+    """
+    image_b64 = base64.b64encode(image_bytes).decode("utf-8")
+    payload = {
+        "model": config.openrouter_vision_model,
+        "messages": [
+            {"role": "system", "content": LABEL_SYSTEM_PROMPT},
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:image/jpeg;base64,{image_b64}"},
+                    }
+                ],
+            },
+        ],
+        "temperature": 0.1,
+        "max_tokens": 500,
+    }
+
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        response = await client.post(
+            f"{config.openrouter_base_url}/chat/completions",
+            headers={
+                "Authorization": f"Bearer {config.openrouter_api_key}",
+                "Content-Type": "application/json",
+                "HTTP-Referer": "https://caltrack.app",
+                "X-Title": "CalTrack",
+            },
+            json=payload,
+        )
+        response.raise_for_status()
+
+    raw = response.json()
+    content = raw["choices"][0]["message"]["content"].strip()
+    if content.startswith("```"):
+        content = content.split("```")[1]
+        if content.startswith("json"):
+            content = content[4:]
+        content = content.strip()
+
+    result = json.loads(content)
+    if not isinstance(result, dict):
+        raise ValueError("Expected JSON object from label extraction")
+    return result
+
+
 def _mock_response() -> list[dict]:
     """Fallback mock for development without an API key."""
     return [

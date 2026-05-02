@@ -20,7 +20,9 @@ from bot.handlers.commands import (
     handle_history,
     handle_help,
     handle_week,
+    handle_add,
 )
+from bot.handlers.label import handle_label
 from bot.handlers.callbacks import handle_callback, handle_text_input
 from bot.handlers.admin import handle_calibrate, handle_stats
 
@@ -60,6 +62,8 @@ def main() -> None:
     app.add_handler(CommandHandler("status", handle_status, filters=auth))
     app.add_handler(CommandHandler("undo", handle_undo, filters=auth))
     app.add_handler(CommandHandler("history", handle_history, filters=auth))
+    app.add_handler(CommandHandler("label", handle_label, filters=auth))
+    app.add_handler(CommandHandler("add", handle_add, filters=auth))
     app.add_handler(CommandHandler("calibrate", handle_calibrate, filters=auth))
     app.add_handler(CommandHandler("stats", handle_stats, filters=auth))
     app.add_handler(CommandHandler("help", handle_help, filters=auth))

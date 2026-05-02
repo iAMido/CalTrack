@@ -10,6 +10,7 @@ from bot.utils.formatters import build_meal_keyboard, detect_meal_type
 from bot.services import vision, nutrition, personal_foods as pf
 from bot.db import supabase_client as db
 from bot.db import queries as db_queries
+from bot.handlers.label import handle_label_photo
 
 logger = logging.getLogger(__name__)
 
@@ -18,6 +19,10 @@ ALLOWED_CHAT_IDS = config.allowed_chat_ids
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if update.effective_chat.id not in ALLOWED_CHAT_IDS:
+        return
+
+    # Label scan takes priority over meal analysis
+    if await handle_label_photo(update, context):
         return
 
     msg = update.message
