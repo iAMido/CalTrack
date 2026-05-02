@@ -55,6 +55,8 @@ def parse_json_format(data: dict) -> list[dict]:
     rows = []
 
     for food in foods:
+        if not food:
+            continue
         fdc_id = food.get("fdcId")
         description = food.get("description", "")
         category = food.get("foodCategory", {}).get("description", "") if isinstance(food.get("foodCategory"), dict) else food.get("foodCategory", "")
@@ -138,12 +140,12 @@ def main():
         try:
             client.table("usda_foundation").upsert(batch, on_conflict="fdc_id").execute()
             uploaded += len(batch)
-            print(f"  ✅ {uploaded}/{len(rows)} uploaded...", end="\r")
+            print(f"  [OK] {uploaded}/{len(rows)} uploaded...", end="\r")
         except Exception as e:
             errors += len(batch)
-            print(f"\n  ❌ Batch {i//BATCH_SIZE + 1} failed: {e}")
+            print(f"\n  [ERROR] Batch {i//BATCH_SIZE + 1} failed: {e}")
 
-    print(f"\n✅ Import complete: {uploaded} foods loaded, {errors} errors.")
+    print(f"\nImport complete: {uploaded} foods loaded, {errors} errors.")
 
 
 if __name__ == "__main__":
