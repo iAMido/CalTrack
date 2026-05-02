@@ -21,7 +21,7 @@ from bot.handlers.commands import (
     handle_help,
     handle_week,
 )
-from bot.handlers.callbacks import handle_callback
+from bot.handlers.callbacks import handle_callback, handle_text_input
 from bot.handlers.admin import handle_calibrate, handle_stats
 
 logging.basicConfig(
@@ -66,6 +66,9 @@ def main() -> None:
 
     # Photo handler
     app.add_handler(MessageHandler(filters.PHOTO & auth, handle_photo))
+
+    # Plain text — manual weight entry and add-item flow
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & auth, handle_text_input))
 
     # Inline keyboard callbacks
     app.add_handler(CallbackQueryHandler(handle_callback))

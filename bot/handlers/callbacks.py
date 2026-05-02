@@ -35,6 +35,21 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await _handle_undo_confirm(query, context, data)
     elif data.startswith("mt:"):
         await _handle_meal_type_change(query, context, data)
+    elif data == "add":
+        await _handle_add_item(query, context)
+
+
+async def _handle_add_item(query, context) -> None:
+    """Prompt user to type a manual item as 'name,grams'."""
+    pending = context.user_data.get("pending_meal")
+    if not pending:
+        await query.edit_message_text("❌ Session expired. Please send the photo again.")
+        return
+    context.user_data["awaiting_add_item"] = True
+    await query.edit_message_text(
+        "✏️ Type the item to add in this format:\n`item name, grams`\n\nExample: `white rice, 150`",
+        parse_mode="Markdown",
+    )
 
 
 async def _handle_weight_selection(query, context, data: str) -> None:
@@ -210,3 +225,85 @@ async def _handle_meal_type_change(query, context, data: str) -> None:
         }
         text, keyboard = build_meal_keyboard(pending, nutrition_map)
         await query.edit_message_text(text, reply_markup=keyboard, parse_mode="Markdown")
+
+
+async def handle_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle plain text replies for manual weight entry and add-item flow."""
+    if update.effective_chat.id not in ALLOWED_CHAT_IDS:
+        return
+
+    text = (update.message.text or "").strip()
+    pending = context.user_data.get("pending_meal")
+
+    # --- Manual weight for existing item ---
+    if "awaiting_manual_weight" in context.user_data:
+        idx = context.user_data.pop("awaiting_manual_weight")
+        if not pending:
+            await update.message.reply_text("Session expired. Please send the photo again.")
+            return
+        try:
+            grams = int(float(text))
+            if grams <= 0:
+                raise ValueError
+        except ValueError:
+            await update.message.reply_text("Please enter a valid number of grams, e.g. `150`", parse_mode="Markdown")
+            context.user_data["awaiting_manual_weight"] = idx
+            return
+
+        pending["items"][idx]["weight_grams"] = grams
+        pending["items"][idx]["weight_source"] = "user_confirmed"
+        fdc_id = pending["items"][idx].get("fdc_id")
+        pending["items"][idx].update(nut_service.calculate_nutrition(fdc_id, grams))
+
+        nutrition_map = {
+            item["fdc_id"]: nut_service.calculate_nutrition(item["fdc_id"], item["weight_grams"])
+            for item in pending["items"] if item.get("fdc_id")
+        }
+        msg_text, keyboard = build_meal_keyboard(pending, nutrition_map)
+        await update.message.reply_text(msg_text, reply_markup=keyboard, parse_mode="Markdown")
+        return
+
+    # --- Add new item ---
+    if context.user_data.pop("awaiting_add_item", False):
+        if not pending:
+            await update.message.reply_text("Session expired. Please send the photo again.")
+            return
+        try:
+            # Accept "name, grams" or "name grams"
+            if "," in text:
+                name_part, grams_part = text.rsplit(",", 1)
+            else:
+                parts = text.rsplit(None, 1)
+                if len(parts) != 2:
+                    raise ValueError
+                name_part, grams_part = parts
+            name = name_part.strip()
+            grams = int(float(grams_part.strip()))
+            if not name or grams <= 0:
+                raise ValueError
+        except (ValueError, AttributeError):
+            await update.message.reply_text(
+                "Format not recognised. Try: `chicken breast, 150`", parse_mode="Markdown"
+            )
+            context.user_data["awaiting_add_item"] = True
+            return
+
+        new_item = {
+            "ingredient_name": name,
+            "ingredient_name_he": name,
+            "fdc_id": None,
+            "weight_grams": grams,
+            "ai_estimated_grams": grams,
+            "weight_source": "user_confirmed",
+            "ai_confidence": 1.0,
+            "auto_approved": False,
+        }
+        new_item.update(nut_service.calculate_nutrition(None, grams))
+        pending["items"].append(new_item)
+
+        nutrition_map = {
+            item["fdc_id"]: nut_service.calculate_nutrition(item["fdc_id"], item["weight_grams"])
+            for item in pending["items"] if item.get("fdc_id")
+        }
+        msg_text, keyboard = build_meal_keyboard(pending, nutrition_map)
+        await update.message.reply_text(msg_text, reply_markup=keyboard, parse_mode="Markdown")
