@@ -51,10 +51,9 @@ def build_meal_keyboard(pending_meal: dict, nutrition_map: dict) -> tuple[str, I
         auto = item.get("auto_approved", False)
         suggestions = item.get("weight_suggestions", [])
 
-        # Calculate nutrition for this item
+        # Use pre-calculated calories from item (works for both USDA and AI-fallback items)
         fdc_id = item.get("fdc_id")
-        nutrition = nutrition_map.get(fdc_id) or {}
-        cal = nutrition.get("calories", 0)
+        cal = item.get("calories") or (nutrition_map.get(fdc_id) or {}).get("calories", 0)
         total_cal += cal
 
         if auto:

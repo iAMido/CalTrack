@@ -1,12 +1,14 @@
 """
-One-time script: Imports USDA Foundation Foods data into Supabase.
+One-time script: Imports USDA nutrition data into Supabase.
 
-1. Download Foundation Foods JSON from:
-   https://fdc.nal.usda.gov/download-datasets (Foundation Foods dataset)
-2. Save as data/foundation_food.json
-3. Run: python scripts/import_usda.py
+Supports multiple USDA datasets (all from https://fdc.nal.usda.gov/download-datasets):
 
-Alternatively, if you have the CSV format, it will try that too.
+  Foundation Foods  (~363 items)  -> data/foundation_food.json
+  SR Legacy         (~8,000 items) -> data/sr_legacy_food.json
+  FNDDS             (~7,000 items) -> data/fndds_food.json
+
+Run once per dataset. All use upsert on fdc_id so safe to re-run.
+Recommended: import all three for best food coverage.
 """
 import sys
 import os
@@ -23,7 +25,13 @@ SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
-JSON_PATH = os.path.join(DATA_DIR, "foundation_food.json")
+
+# All supported dataset files, in priority order
+DATASET_FILES = [
+    os.path.join(DATA_DIR, "foundation_food.json"),   # Foundation Foods
+    os.path.join(DATA_DIR, "sr_legacy_food.json"),    # SR Legacy (~8,000 foods)
+    os.path.join(DATA_DIR, "fndds_food.json"),        # FNDDS (~7,000 mixed dishes)
+]
 CSV_PATH = os.path.join(DATA_DIR, "usda_foundation.csv")
 
 BATCH_SIZE = 200
@@ -50,8 +58,14 @@ NUTRIENT_IDS = {
 
 
 def parse_json_format(data: dict) -> list[dict]:
-    """Parse the USDA Foundation Foods JSON format."""
-    foods = data.get("FoundationFoods", [])
+    """Parse USDA JSON format — handles Foundation Foods, SR Legacy, and FNDDS."""
+    # Each dataset uses a different top-level key
+    foods = (
+        data.get("FoundationFoods")
+        or data.get("SRLegacyFoods")
+        or data.get("SurveyFoods")  # FNDDS
+        or []
+    )
     rows = []
 
     for food in foods:
@@ -109,27 +123,44 @@ def main():
         print("ERROR: SUPABASE_URL and SUPABASE_KEY must be set in .env")
         sys.exit(1)
 
-    # Try JSON first, then CSV
-    if os.path.exists(JSON_PATH):
-        print(f"Loading from {JSON_PATH}...")
-        with open(JSON_PATH, encoding="utf-8") as f:
-            data = json.load(f)
-        rows = parse_json_format(data)
-    elif os.path.exists(CSV_PATH):
+    # Collect rows from all available dataset files
+    all_rows = []
+    found_any = False
+    for path in DATASET_FILES:
+        if os.path.exists(path):
+            found_any = True
+            print(f"Loading {os.path.basename(path)}...")
+            with open(path, encoding="utf-8") as f:
+                data = json.load(f)
+            rows = parse_json_format(data)
+            print(f"  Parsed {len(rows)} foods.")
+            all_rows.extend(rows)
+
+    if not found_any and os.path.exists(CSV_PATH):
         print(f"Loading from {CSV_PATH}...")
-        rows = parse_csv_format(CSV_PATH)
-    else:
-        print(f"ERROR: No data file found.")
-        print(f"  Expected: {JSON_PATH}")
-        print(f"  Or:       {CSV_PATH}")
-        print("\nDownload Foundation Foods from: https://fdc.nal.usda.gov/download-datasets")
+        all_rows = parse_csv_format(CSV_PATH)
+
+    if not found_any and not all_rows:
+        print("ERROR: No data file found.")
+        print("Download datasets from: https://fdc.nal.usda.gov/download-datasets")
+        print("  Foundation Foods -> data/foundation_food.json")
+        print("  SR Legacy        -> data/sr_legacy_food.json")
+        print("  FNDDS            -> data/fndds_food.json")
         sys.exit(1)
+
+    # Deduplicate by fdc_id (Foundation Foods takes priority — highest quality)
+    seen = {}
+    for row in all_rows:
+        fdc_id = row.get("fdc_id")
+        if fdc_id and fdc_id not in seen:
+            seen[fdc_id] = row
+    rows = list(seen.values())
 
     if not rows:
-        print("ERROR: No rows parsed from data file.")
+        print("ERROR: No rows parsed from data files.")
         sys.exit(1)
 
-    print(f"Parsed {len(rows)} foods. Uploading to Supabase in batches of {BATCH_SIZE}...")
+    print(f"\nTotal unique foods: {len(rows)}. Uploading in batches of {BATCH_SIZE}...")
 
     client = create_client(SUPABASE_URL, SUPABASE_KEY)
     uploaded = 0
