@@ -1,19 +1,31 @@
-# data/ — Local Data Files
+# data/ — Local Nutrition Data Files
 
 ## What This Is
-Stores large data files that are downloaded once and used locally. All files in this directory (except this CLAUDE.md) are gitignored.
+Stores large USDA dataset files downloaded once and imported into Supabase. All data files are gitignored.
 
 ## Files
-| File | Size | Source | Used By |
-|------|------|--------|---------|
-| `usda_foundation.csv` | ~5 MB | USDA FoodData Central | `scripts/import_usda.py` |
-| `foundation_food.json` | ~8 MB | USDA FoodData Central (alt format) | `scripts/import_usda.py` |
+| File | Foods | Source | Status |
+|------|-------|--------|--------|
+| `foundation_food.json` | ~363 | USDA Foundation Foods | Imported |
+| `sr_legacy_food.json` | ~7,793 | USDA SR Legacy | Imported |
+| `fndds_food.json` | ~7,000 | USDA FNDDS (mixed dishes) | Optional |
 
-## How to Get the USDA Data
-1. Go to https://fdc.nal.usda.gov/download-datasets
-2. Download **Foundation Foods** (JSON or CSV format)
-3. Place the file here as `usda_foundation.csv` or `foundation_food.json`
-4. Run: `python scripts/import_usda.py`
+## Current State
+8,156 foods imported into Supabase `usda_foundation` table (Foundation + SR Legacy merged, deduplicated by fdc_id).
+
+## How to Download More Datasets
+All from: https://fdc.nal.usda.gov/download-datasets
+- **Foundation Foods** → save as `data/foundation_food.json`
+- **SR Legacy** → save as `data/sr_legacy_food.json`
+- **FNDDS** → save as `data/fndds_food.json`
+
+Then run: `python scripts/import_usda.py` — handles all three automatically.
 
 ## Why Local?
-The USDA FoodData Central API returns hundreds of results for any search (brands, raw vs. cooked, different countries). The local Foundation Foods table has ~2,000 curated base ingredients with unambiguous fdc_ids — the Vision AI can match directly to these IDs, eliminating search ambiguity and API latency.
+The import script merges datasets and deduplicates by fdc_id. Foundation Foods takes priority (highest accuracy). The bot loads all foods into memory on startup for fast lookup without per-request DB queries.
+
+## Nutrition Matching Strategy
+1. Vision AI identifies food by name and provides its own calorie estimates
+2. `nutrition.py::find_usda_match()` does local word-overlap matching against 8k+ USDA descriptions
+3. If USDA match found → use USDA nutrition values (authoritative)
+4. If no match → use AI-provided `calories_per_100g` etc. as fallback
