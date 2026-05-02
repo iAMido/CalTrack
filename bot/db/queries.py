@@ -64,7 +64,7 @@ async def refresh_daily_summary(date_str: str, user_id: str) -> dict:
 
     # Sum exercise calories
     runs_result = (
-        client.table("runs")
+        client.table("caltrack_runs")
         .select("calories_burned")
         .gte("run_date", f"{date_str}T00:00:00")
         .lte("run_date", f"{date_str}T23:59:59")

@@ -53,7 +53,7 @@ async def recalibrate(trigger: str = "manual") -> dict:
         "new_bmr": new_bmr,
         "new_tdee": new_tdee,
         "new_target_calories": new_target,
-        "trigger": trigger,
+        "calibration_trigger": trigger,
     })
 
     # Update profile

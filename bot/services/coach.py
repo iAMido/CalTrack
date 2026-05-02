@@ -34,7 +34,7 @@ async def gather_weekly_data(user_id: str, end_date: str | None = None) -> dict:
     client = db.get_client()
 
     meals = client.table("meals").select("*").eq("user_id", user_id).gte("eaten_at", start_str).lte("eaten_at", end_str).execute().data or []
-    runs = client.table("runs").select("*").eq("user_id", user_id).gte("run_date", start_str).lte("run_date", end_str).execute().data or []
+    runs = client.table("caltrack_runs").select("*").eq("user_id", user_id).gte("run_date", start_str).lte("run_date", end_str).execute().data or []
     weights = client.table("weight_log").select("*").eq("user_id", user_id).gte("measured_at", start_str).lte("measured_at", end_str).execute().data or []
     summaries = client.table("daily_summary").select("*").eq("user_id", user_id).gte("date", start.strftime("%Y-%m-%d")).lte("date", end.strftime("%Y-%m-%d")).execute().data or []
 

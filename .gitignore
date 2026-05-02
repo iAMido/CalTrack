@@ -83,6 +83,10 @@ data/*.zip
 # Supabase local
 .supabase/
 
+# Sensitive local files
+settings.txt
+*.txt
+
 # IDE
 .idea/
 .vscode/

@@ -116,7 +116,7 @@ async def handle_run(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         "run_date": datetime.now(tz).isoformat(),
     }
 
-    await db.insert("runs", run_data)
+    await db.insert("caltrack_runs", run_data)
 
     pace_str = format_pace(pace_sec) if pace_sec else "?"
     hr_str = f" | ❤️ {avg_hr}" if avg_hr else ""

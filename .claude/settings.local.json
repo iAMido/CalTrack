@@ -7,7 +7,15 @@
       "mcp__supabase__execute_sql",
       "mcp__supabase__list_tables",
       "mcp__supabase__get_project_url",
-      "Bash(git add *)"
+      "Bash(git add *)",
+      "Bash(psql --version)",
+      "Bash(pip show *)",
+      "Bash(git rm *)",
+      "Bash(pip install *)",
+      "Bash(python -c ' *)",
+      "Bash(git config *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)"
     ]
   }
 }

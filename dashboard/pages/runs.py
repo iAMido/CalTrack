@@ -11,7 +11,7 @@ def render():
     st.title("🏃 Runs")
 
     client = db.get_client()
-    runs = client.table("runs").select("*").order("run_date", desc=True).limit(50).execute().data or []
+    runs = client.table("caltrack_runs").select("*").order("run_date", desc=True).limit(50).execute().data or []
 
     if not runs:
         st.info("No runs logged yet.")
