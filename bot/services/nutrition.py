@@ -22,17 +22,18 @@ def get_usda_food_sync(fdc_id: int) -> dict | None:
     return _usda_cache.get(fdc_id)
 
 
-def calculate_nutrition(fdc_id: int | None, weight_grams: int) -> dict:
+def calculate_nutrition(fdc_id: int | None, weight_grams: int, ai_fallback: dict | None = None) -> dict:
     """
     Calculate nutrition for weight_grams of fdc_id food.
-    Returns zeros if fdc_id is unknown.
+    Falls back to ai_fallback values (from vision AI) if no USDA match.
     """
     empty = {"calories": 0, "protein_g": 0.0, "carbs_g": 0.0, "fat_g": 0.0, "fiber_g": 0.0}
 
-    if fdc_id is None:
-        return empty
+    food = _usda_cache.get(fdc_id) if fdc_id else None
 
-    food = get_usda_food_sync(fdc_id)
+    if not food and ai_fallback:
+        food = ai_fallback
+
     if not food:
         return empty
 

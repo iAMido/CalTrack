@@ -13,10 +13,12 @@ RULES:
 2. Estimate weight in grams. Be CONSERVATIVE — round down when uncertain.
 3. Match each item to the closest entry from the FOOD DATABASE provided. Return the fdc_id from the database.
    If no close match exists, return fdc_id as null.
-4. Include a confidence score (0.0 to 1.0) for your weight estimate.
+4. ALWAYS provide calories_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g using your nutritional knowledge.
+   These are used as fallback when no USDA match exists.
+5. Include a confidence score (0.0 to 1.0) for your weight estimate.
    If you cannot see the depth/thickness of the food, confidence should be below 0.5.
-5. Provide the Hebrew name for each item.
-6. Return ONLY valid JSON array. No explanations, no markdown, no code blocks.
+6. Provide the Hebrew name for each item.
+7. Return ONLY valid JSON array. No explanations, no markdown, no code blocks.
 
 OUTPUT FORMAT:
 [
@@ -25,7 +27,11 @@ OUTPUT FORMAT:
     "ingredient_name_he": "חזה עוף צלוי",
     "fdc_id": 171077,
     "estimated_weight_grams": 150,
-    "confidence": 0.65
+    "confidence": 0.65,
+    "calories_per_100g": 165,
+    "protein_per_100g": 31.0,
+    "carbs_per_100g": 0.0,
+    "fat_per_100g": 3.6
   }
 ]"""
 

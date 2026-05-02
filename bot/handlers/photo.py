@@ -86,13 +86,23 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             weight_source = "ai_estimate"
             suggestions = await pf.get_weight_suggestions(pf_id, meal_type, ai_weight)
 
+        # AI-provided nutrition values as fallback when no USDA match
+        ai_fallback = {
+            "calories_per_100g": item.get("calories_per_100g"),
+            "protein_per_100g": item.get("protein_per_100g"),
+            "carbs_per_100g": item.get("carbs_per_100g"),
+            "fat_per_100g": item.get("fat_per_100g"),
+            "fiber_per_100g": item.get("fiber_per_100g"),
+        } if item.get("calories_per_100g") else None
+
         # Calculate nutrition at current weight
-        nut = nutrition.calculate_nutrition(fdc_id, confirmed_weight)
+        nut = nutrition.calculate_nutrition(fdc_id, confirmed_weight, ai_fallback)
 
         enriched_items.append({
             "ingredient_name": ingredient_name,
             "ingredient_name_he": item.get("ingredient_name_he", ""),
             "fdc_id": fdc_id,
+            "ai_fallback": ai_fallback,
             "weight_grams": confirmed_weight,
             "ai_estimated_grams": ai_weight,
             "ai_confidence": confidence,

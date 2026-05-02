@@ -79,12 +79,13 @@ async def _handle_weight_selection(query, context, data: str) -> None:
 
     # Recalculate nutrition
     fdc_id = pending["items"][idx].get("fdc_id")
-    nut = nut_service.calculate_nutrition(fdc_id, new_weight)
+    ai_fallback = pending["items"][idx].get("ai_fallback")
+    nut = nut_service.calculate_nutrition(fdc_id, new_weight, ai_fallback)
     pending["items"][idx].update(nut)
 
     # Rebuild keyboard
     nutrition_map = {
-        item["fdc_id"]: nut_service.calculate_nutrition(item["fdc_id"], item["weight_grams"])
+        item["fdc_id"]: nut_service.calculate_nutrition(item["fdc_id"], item["weight_grams"], item.get("ai_fallback"))
         for item in pending["items"] if item.get("fdc_id")
     }
     text, keyboard = build_meal_keyboard(pending, nutrition_map)
@@ -220,7 +221,7 @@ async def _handle_meal_type_change(query, context, data: str) -> None:
     if pending:
         pending["meal_type"] = new_type
         nutrition_map = {
-            item["fdc_id"]: nut_service.calculate_nutrition(item["fdc_id"], item["weight_grams"])
+            item["fdc_id"]: nut_service.calculate_nutrition(item["fdc_id"], item["weight_grams"], item.get("ai_fallback"))
             for item in pending["items"] if item.get("fdc_id")
         }
         text, keyboard = build_meal_keyboard(pending, nutrition_map)
@@ -253,10 +254,10 @@ async def handle_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         pending["items"][idx]["weight_grams"] = grams
         pending["items"][idx]["weight_source"] = "user_confirmed"
         fdc_id = pending["items"][idx].get("fdc_id")
-        pending["items"][idx].update(nut_service.calculate_nutrition(fdc_id, grams))
+        pending["items"][idx].update(nut_service.calculate_nutrition(fdc_id, grams, pending["items"][idx].get("ai_fallback")))
 
         nutrition_map = {
-            item["fdc_id"]: nut_service.calculate_nutrition(item["fdc_id"], item["weight_grams"])
+            item["fdc_id"]: nut_service.calculate_nutrition(item["fdc_id"], item["weight_grams"], item.get("ai_fallback"))
             for item in pending["items"] if item.get("fdc_id")
         }
         msg_text, keyboard = build_meal_keyboard(pending, nutrition_map)
