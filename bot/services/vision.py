@@ -11,40 +11,27 @@ VISION_SYSTEM_PROMPT = """You are a food identification specialist. Analyze the 
 RULES:
 1. Identify each food item separately (e.g., rice and chicken are two items).
 2. Estimate weight in grams. Be CONSERVATIVE — round down when uncertain.
-3. Match each item to the closest entry from the FOOD DATABASE provided. Return the fdc_id from the database.
-   If no close match exists, return fdc_id as null.
-4. ALWAYS provide calories_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g using your nutritional knowledge.
-   These are used as fallback when no USDA match exists.
-5. Include a confidence score (0.0 to 1.0) for your weight estimate.
+3. ALWAYS provide calories_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g, fiber_per_100g
+   using your nutritional knowledge of the raw/cooked food as visible.
+4. Include a confidence score (0.0 to 1.0) for your weight estimate.
    If you cannot see the depth/thickness of the food, confidence should be below 0.5.
-6. Provide the Hebrew name for each item.
-7. Return ONLY valid JSON array. No explanations, no markdown, no code blocks.
+5. Provide the Hebrew name for each item.
+6. Return ONLY valid JSON array. No explanations, no markdown, no code blocks.
 
 OUTPUT FORMAT:
 [
   {
     "ingredient_name": "grilled chicken breast",
     "ingredient_name_he": "חזה עוף צלוי",
-    "fdc_id": 171077,
     "estimated_weight_grams": 150,
     "confidence": 0.65,
     "calories_per_100g": 165,
     "protein_per_100g": 31.0,
     "carbs_per_100g": 0.0,
-    "fat_per_100g": 3.6
+    "fat_per_100g": 3.6,
+    "fiber_per_100g": 0.0
   }
 ]"""
-
-
-def _build_food_list(usda_foods: list[dict]) -> str:
-    """Build a condensed food list string for the vision prompt."""
-    lines = []
-    for food in usda_foods:
-        fdc_id = food.get("fdc_id")
-        desc = food.get("description", "")
-        category = food.get("food_category", "")
-        lines.append(f"{fdc_id}: {desc}" + (f" [{category}]" if category else ""))
-    return "\n".join(lines)
 
 
 def _build_corrections_text(corrections: list[dict]) -> str:
@@ -64,25 +51,23 @@ def _build_corrections_text(corrections: list[dict]) -> str:
 
 async def analyze_meal_photo(
     image_bytes: bytes,
-    usda_foods: list[dict],
+    usda_foods: list[dict] | None = None,
     corrections: list[dict] | None = None,
 ) -> list[dict]:
     """
     Send photo to OpenRouter vision model and return identified food items.
 
     Returns list of dicts with keys:
-        ingredient_name, ingredient_name_he, fdc_id, estimated_weight_grams, confidence
+        ingredient_name, ingredient_name_he, estimated_weight_grams, confidence,
+        calories_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g, fiber_per_100g
     """
     if not config.openrouter_api_key:
         logger.warning("OPENROUTER_API_KEY not set — returning mock data")
         return _mock_response()
 
-    food_list = _build_food_list(usda_foods)
     corrections_text = _build_corrections_text(corrections or [])
 
     system_content = VISION_SYSTEM_PROMPT
-    if food_list:
-        system_content += f"\n\nFOOD DATABASE:\n{food_list}"
     if corrections_text:
         system_content += f"\n\n{corrections_text}"
 

@@ -47,6 +47,28 @@ def calculate_nutrition(fdc_id: int | None, weight_grams: int, ai_fallback: dict
     }
 
 
+def find_usda_match(ingredient_name: str) -> int | None:
+    """Find the best fdc_id for an ingredient name using simple word matching."""
+    if not ingredient_name or not _usda_cache:
+        return None
+    name_lower = ingredient_name.lower()
+    name_words = set(name_lower.split())
+
+    best_fdc_id = None
+    best_score = 0
+
+    for fdc_id, food in _usda_cache.items():
+        desc = (food.get("description") or "").lower()
+        desc_words = set(desc.split())
+        # Score = number of matching words
+        overlap = len(name_words & desc_words)
+        if overlap > best_score:
+            best_score = overlap
+            best_fdc_id = fdc_id
+
+    return best_fdc_id if best_score >= 1 else None
+
+
 def build_food_list_for_prompt() -> list[dict]:
     """Return all cached USDA foods for the vision prompt."""
     return list(_usda_cache.values())

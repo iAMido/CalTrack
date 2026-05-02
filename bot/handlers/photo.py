@@ -42,15 +42,12 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     # Detect meal type from time of day
     meal_type = detect_meal_type()
 
-    # Get USDA food list for the vision prompt
-    usda_foods = nutrition.build_food_list_for_prompt()
-
     # Get recent AI corrections as few-shot examples
     corrections = await _get_corrections_summary()
 
     # Call Vision AI
     try:
-        ai_items = await vision.analyze_meal_photo(bytes(photo_bytes), usda_foods, corrections)
+        ai_items = await vision.analyze_meal_photo(bytes(photo_bytes), corrections=corrections)
     except Exception as e:
         logger.error(f"Vision AI error: {e}")
         await msg.reply_text(f"❌ Could not analyze the photo: {e}\n\nPlease try again or use /summary to log manually.")
@@ -66,7 +63,8 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
     for item in ai_items:
         ingredient_name = item.get("ingredient_name", "")
-        fdc_id = item.get("fdc_id")
+        # AI no longer returns fdc_id — find best USDA match locally
+        fdc_id = nutrition.find_usda_match(ingredient_name)
         ai_weight = item.get("estimated_weight_grams", 100)
         confidence = item.get("confidence", 0.5)
 
