@@ -87,9 +87,9 @@ def main():
         on_conflict="telegram_chat_id",
     ).execute()
 
-    print("\n✅ User profile created/updated successfully!")
+    print("\n[OK] User profile created/updated successfully!")
     print(f"   Height: {PROFILE['height_cm']} cm")
-    print(f"   Weight: {PROFILE['current_weight_kg']} kg → Target: {PROFILE['target_weight_kg']} kg")
+    print(f"   Weight: {PROFILE['current_weight_kg']} kg -> Target: {PROFILE['target_weight_kg']} kg")
     print(f"   BMR: {bmr} kcal/day")
     print(f"   TDEE: {tdee} kcal/day (activity factor: {PROFILE['activity_factor']})")
     print(f"   Daily target: {target_calories} kcal/day")

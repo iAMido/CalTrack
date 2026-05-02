@@ -15,7 +15,8 @@
       "Bash(python -c ' *)",
       "Bash(git config *)",
       "Bash(git commit -m ' *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(python scripts/seed_profile.py)"
     ]
   }
 }
