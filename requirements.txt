@@ -4,8 +4,6 @@ python-telegram-bot==20.7
 # Supabase
 supabase==2.3.4
 
-# HTTP client
-httpx==0.27.0
 
 # Environment & config
 python-dotenv==1.0.1
