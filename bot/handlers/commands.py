@@ -11,6 +11,7 @@ from bot.utils.met_calculator import calculate_calories_burned, pace_to_sec_per_
 from bot.services import nutrition as nut_service
 from bot.services.translator import translate
 from bot.utils.formatters import detect_meal_type
+from bot.services.calibration import check_and_recalibrate, format_calibration_message
 from bot.db import supabase_client as db
 from bot.db import queries as db_queries
 
@@ -46,6 +47,14 @@ async def handle_weight(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     await db.update("user_profile", {"id": profile["id"]}, {"current_weight_kg": weight_kg})
 
     await update.message.reply_text(f"⚖️ Weight logged: *{weight_kg} kg*", parse_mode="Markdown")
+
+    # Auto-recalibrate if milestone or weekly threshold reached
+    try:
+        cal_result = await check_and_recalibrate()
+        if cal_result:
+            await update.message.reply_text(format_calibration_message(cal_result), parse_mode="Markdown")
+    except Exception as e:
+        logger.warning(f"Auto-calibration after weight log failed: {e}")
 
 
 async def handle_water(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

@@ -1,5 +1,7 @@
 import asyncio
 import logging
+from datetime import time as dt_time
+import pytz
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -9,6 +11,7 @@ from telegram.ext import (
 )
 from bot.utils.config import config
 from bot.services.nutrition import load_usda_cache
+from bot.services.calibration import recalibrate, format_calibration_message
 from bot.handlers.photo import handle_photo
 from bot.handlers.commands import (
     handle_weight,
@@ -33,10 +36,34 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+async def weekly_calibration_job(context) -> None:
+    """Runs every Sunday at 20:00 — recalibrates BMR/TDEE and notifies."""
+    try:
+        result = await recalibrate(trigger="weekly_auto")
+        msg = format_calibration_message(result)
+        await context.bot.send_message(
+            chat_id=config.telegram_allowed_chat_id,
+            text=msg,
+            parse_mode="Markdown",
+        )
+        logger.info("Weekly calibration completed.")
+    except Exception as e:
+        logger.error(f"Weekly calibration job failed: {e}")
+
+
 async def post_init(application: Application) -> None:
-    """Called once after the bot starts — load caches, etc."""
+    """Called once after the bot starts — load caches and schedule jobs."""
     logger.info("Loading USDA nutrition cache...")
     await load_usda_cache()
+
+    tz = pytz.timezone(config.user_timezone)
+    # Run every Sunday at 20:00 (days: 0=Sun in PTB's convention)
+    application.job_queue.run_daily(
+        weekly_calibration_job,
+        time=dt_time(20, 0, tzinfo=tz),
+        days=(0,),
+        name="weekly_calibration",
+    )
     logger.info("CalTrack bot ready.")
 
 
