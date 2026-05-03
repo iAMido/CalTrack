@@ -28,7 +28,7 @@ from bot.handlers.commands import (
 )
 from bot.handlers.label import handle_label
 from bot.handlers.callbacks import handle_callback, handle_text_input
-from bot.handlers.admin import handle_calibrate, handle_stats
+from bot.handlers.admin import handle_calibrate, handle_stats, handle_syncstrava
 
 logging.basicConfig(
     format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
@@ -117,6 +117,7 @@ def main() -> None:
     app.add_handler(CommandHandler("add", handle_add, filters=auth))
     app.add_handler(CommandHandler("calibrate", handle_calibrate, filters=auth))
     app.add_handler(CommandHandler("stats", handle_stats, filters=auth))
+    app.add_handler(CommandHandler("syncstrava", handle_syncstrava, filters=auth))
     app.add_handler(CommandHandler("help", handle_help, filters=auth))
 
     # Photo handler

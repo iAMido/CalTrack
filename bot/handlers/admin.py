@@ -3,6 +3,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 from bot.utils.config import config
 from bot.services.calibration import recalibrate, format_calibration_message
+from bot.services.strava import sync_strava_runs, format_run_message, is_configured
 from bot.db import queries as db_queries
 
 logger = logging.getLogger(__name__)
@@ -20,6 +21,27 @@ async def handle_calibrate(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     except Exception as e:
         logger.error(f"Calibration error: {e}")
         await update.message.reply_text(f"❌ Calibration failed: {e}")
+
+
+async def handle_syncstrava(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if update.effective_chat.id not in ALLOWED_CHAT_IDS:
+        return
+
+    if not is_configured():
+        await update.message.reply_text("⚠️ Strava credentials not configured. Add STRAVA_CLIENT_ID, STRAVA_CLIENT_SECRET, STRAVA_REFRESH_TOKEN to Railway Variables.")
+        return
+
+    await update.message.reply_text("🔄 Syncing Strava runs...")
+    try:
+        imported = await sync_strava_runs()
+        if not imported:
+            await update.message.reply_text("✅ Strava sync complete — no new runs found.")
+        else:
+            for run in imported:
+                await update.message.reply_text(format_run_message(run), parse_mode="Markdown")
+    except Exception as e:
+        logger.error(f"Manual Strava sync error: {e}")
+        await update.message.reply_text(f"❌ Strava sync failed: {e}")
 
 
 async def handle_stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
