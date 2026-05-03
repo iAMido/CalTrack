@@ -12,6 +12,7 @@ from telegram.ext import (
 from bot.utils.config import config
 from bot.services.nutrition import load_usda_cache
 from bot.services.calibration import recalibrate, format_calibration_message
+from bot.services.strava import sync_strava_runs, format_run_message
 from bot.handlers.photo import handle_photo
 from bot.handlers.commands import (
     handle_weight,
@@ -51,6 +52,22 @@ async def weekly_calibration_job(context) -> None:
         logger.error(f"Weekly calibration job failed: {e}")
 
 
+async def strava_sync_job(context) -> None:
+    """Runs daily at 22:00 — imports new Strava runs and notifies."""
+    try:
+        imported = await sync_strava_runs()
+        for run in imported:
+            await context.bot.send_message(
+                chat_id=config.telegram_allowed_chat_id,
+                text=format_run_message(run),
+                parse_mode="Markdown",
+            )
+        if not imported:
+            logger.info("Strava sync: no new runs.")
+    except Exception as e:
+        logger.error(f"Strava sync job failed: {e}")
+
+
 async def post_init(application: Application) -> None:
     """Called once after the bot starts — load caches and schedule jobs."""
     logger.info("Loading USDA nutrition cache...")
@@ -63,6 +80,13 @@ async def post_init(application: Application) -> None:
         time=dt_time(20, 0, tzinfo=tz),
         days=(0,),
         name="weekly_calibration",
+    )
+
+    # Strava sync: daily at 22:00
+    application.job_queue.run_daily(
+        strava_sync_job,
+        time=dt_time(22, 0, tzinfo=tz),
+        name="strava_sync",
     )
     logger.info("CalTrack bot ready.")
 
