@@ -74,7 +74,30 @@ python -m bot.main
 | `SUPABASE_KEY` | service_role key (bypasses RLS) |
 | `USER_TIMEZONE` | e.g. `Asia/Jerusalem` |
 
+## Deployment (Railway)
+The bot runs 24/7 on Railway. `master` branch is the production branch — every push triggers an automatic redeploy.
+
+**Railway files (safe to commit):**
+- `railway.toml` — build config (`builder = "nixpacks"`, `startCommand = "python -m bot.main"`)
+- `Dockerfile` — Docker container definition
+- `Procfile` — process type fallback
+
+**Railway files (gitignored):**
+- `.railway/` — local Railway CLI auth tokens, never commit
+
+**Secrets in production:** Set all env vars in Railway dashboard → Service → Variables. Never in any committed file.
+
+**Git → Railway workflow:**
+```bash
+git add <files>
+git commit -m "..."
+git push origin master   # triggers Railway redeploy (~2 min)
+```
+
+**Dependency rule:** `python-telegram-bot==21.3` requires `httpx~=0.27`. Use `supabase>=2.7.0` — older supabase pins httpx<0.26 and causes a build conflict.
+
 ## Security
 - Telegram: all updates checked against `TELEGRAM_ALLOWED_CHAT_ID`
-- Supabase: service_role key kept in `.env` (gitignored), never committed
-- Photos stored in private Supabase Storage bucket `meals`
+- Supabase: service_role key kept in `.env` (gitignored) and in Railway Variables — never committed
+- Photos stored in private Supabase Storage bucket `meals` (no public URLs)
+- Railway: no secrets in `railway.toml` — all secrets injected at runtime via Railway Variables

@@ -83,6 +83,9 @@ data/*.zip
 # Supabase local
 .supabase/
 
+# Railway CLI (contains local auth tokens — never commit)
+.railway/
+
 # Sensitive local files
 settings.txt
 *.txt
