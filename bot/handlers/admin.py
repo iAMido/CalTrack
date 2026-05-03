@@ -28,20 +28,29 @@ async def handle_syncstrava(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         return
 
     if not is_configured():
-        await update.message.reply_text("⚠️ Strava credentials not configured. Add STRAVA_CLIENT_ID, STRAVA_CLIENT_SECRET, STRAVA_REFRESH_TOKEN to Railway Variables.")
+        await update.message.reply_text(
+            "⚠️ Strava credentials not configured.\n"
+            "Add these to Railway Variables:\n"
+            "`STRAVA_CLIENT_ID`\n`STRAVA_CLIENT_SECRET`\n`STRAVA_REFRESH_TOKEN`",
+            parse_mode="Markdown",
+        )
         return
 
-    await update.message.reply_text("🔄 Syncing Strava runs...")
+    await update.message.reply_text("🔄 Connecting to Strava...")
     try:
         imported = await sync_strava_runs()
         if not imported:
-            await update.message.reply_text("✅ Strava sync complete — no new runs found.")
+            await update.message.reply_text(
+                "✅ Strava connected — no new runs in the last 48 hours.\n"
+                "Runs will sync automatically every day at 22:00."
+            )
         else:
+            await update.message.reply_text(f"✅ Imported {len(imported)} run(s):")
             for run in imported:
                 await update.message.reply_text(format_run_message(run), parse_mode="Markdown")
     except Exception as e:
         logger.error(f"Manual Strava sync error: {e}")
-        await update.message.reply_text(f"❌ Strava sync failed: {e}")
+        await update.message.reply_text(f"❌ Strava sync failed:\n`{e}`", parse_mode="Markdown")
 
 
 async def handle_stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
