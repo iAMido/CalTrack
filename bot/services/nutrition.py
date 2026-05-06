@@ -31,6 +31,10 @@ def calculate_nutrition(fdc_id: int | None, weight_grams: int, ai_fallback: dict
 
     food = _usda_cache.get(fdc_id) if fdc_id else None
 
+    # If USDA match has no calorie data, fall through to AI values
+    if food and not food.get("calories_per_100g"):
+        food = None
+
     if not food and ai_fallback:
         food = ai_fallback
 
