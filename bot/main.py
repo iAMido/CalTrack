@@ -13,6 +13,7 @@ from bot.utils.config import config
 from bot.services.nutrition import load_usda_cache
 from bot.services.calibration import recalibrate, format_calibration_message
 from bot.services.strava import sync_strava_runs, format_run_message
+from bot.services.coach import run_weekly_coach, split_for_telegram
 from bot.handlers.photo import handle_photo
 from bot.handlers.commands import (
     handle_weight,
@@ -68,6 +69,27 @@ async def strava_sync_job(context) -> None:
         logger.error(f"Strava sync job failed: {e}")
 
 
+async def weekly_coach_job(context) -> None:
+    """Runs every Saturday at 22:00 — sends weekly AI Coach report in Hebrew."""
+    try:
+        from bot.db import queries as db_queries
+        profile = await db_queries.get_user_profile()
+        if not profile:
+            logger.warning("Weekly coach: no user profile found.")
+            return
+
+        report = await run_weekly_coach(profile["id"])
+        chunks = split_for_telegram(report)
+        for chunk in chunks:
+            await context.bot.send_message(
+                chat_id=config.telegram_allowed_chat_id,
+                text=chunk,
+            )
+        logger.info("Weekly coach report sent.")
+    except Exception as e:
+        logger.error(f"Weekly coach job failed: {e}")
+
+
 async def post_init(application: Application) -> None:
     """Called once after the bot starts — load caches and schedule jobs."""
     logger.info("Loading USDA nutrition cache...")
@@ -87,6 +109,14 @@ async def post_init(application: Application) -> None:
         strava_sync_job,
         time=dt_time(22, 0, tzinfo=tz),
         name="strava_sync",
+    )
+
+    # AI Coach: Saturday at 22:00 (days: 6=Sat in PTB's convention)
+    application.job_queue.run_daily(
+        weekly_coach_job,
+        time=dt_time(22, 0, tzinfo=tz),
+        days=(6,),
+        name="weekly_coach",
     )
     logger.info("CalTrack bot ready.")
 

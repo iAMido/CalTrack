@@ -379,7 +379,23 @@ async def _estimate_nutrition_text(food_name: str) -> dict | None:
 async def handle_week(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not _check_auth(update):
         return
-    await update.message.reply_text("📊 Weekly AI Coach report is a Stage 3 feature. Coming soon!")
+
+    profile = await db_queries.get_user_profile()
+    if not profile:
+        await update.message.reply_text("⚠️ No profile found.")
+        return
+
+    await update.message.reply_text("📊 Generating your weekly AI Coach report...")
+
+    from bot.services.coach import run_weekly_coach, split_for_telegram
+    try:
+        report = await run_weekly_coach(profile["id"])
+        chunks = split_for_telegram(report)
+        for chunk in chunks:
+            await update.message.reply_text(chunk)
+    except Exception as e:
+        logger.warning(f"Weekly coach report failed: {e}")
+        await update.message.reply_text("❌ Could not generate the weekly report. Try again later.")
 
 
 async def handle_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
