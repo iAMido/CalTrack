@@ -20,7 +20,7 @@ def is_configured() -> bool:
 
 
 async def refresh_access_token() -> str:
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=30.0) as client:
         response = await client.post(STRAVA_TOKEN_URL, data={
             "client_id": config.strava_client_id,
             "client_secret": config.strava_client_secret,
@@ -43,7 +43,7 @@ async def _get_token() -> str:
 
 async def fetch_recent_activities(after_timestamp: int) -> list[dict]:
     token = await _get_token()
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=30.0) as client:
         resp = await client.get(
             f"{STRAVA_API_BASE}/athlete/activities",
             headers={"Authorization": f"Bearer {token}"},

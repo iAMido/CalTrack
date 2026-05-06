@@ -55,7 +55,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         ai_items = await vision.analyze_meal_photo(bytes(photo_bytes), corrections=corrections)
     except Exception as e:
         logger.error(f"Vision AI error: {e}")
-        await msg.reply_text(f"❌ Could not analyze the photo: {e}\n\nPlease try again or use /summary to log manually.")
+        await msg.reply_text("❌ Could not analyze the photo. Please try again or use `/add` to log manually.", parse_mode="Markdown")
         return
 
     if not ai_items:

@@ -20,7 +20,7 @@ async def handle_calibrate(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         await update.message.reply_text(format_calibration_message(result), parse_mode="Markdown")
     except Exception as e:
         logger.error(f"Calibration error: {e}")
-        await update.message.reply_text(f"❌ Calibration failed: {e}")
+        await update.message.reply_text("❌ Calibration failed. Check logs for details.")
 
 
 async def handle_syncstrava(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -50,7 +50,7 @@ async def handle_syncstrava(update: Update, context: ContextTypes.DEFAULT_TYPE) 
                 await update.message.reply_text(format_run_message(run), parse_mode="Markdown")
     except Exception as e:
         logger.error(f"Manual Strava sync error: {e}")
-        await update.message.reply_text(f"❌ Strava sync failed:\n`{e}`", parse_mode="Markdown")
+        await update.message.reply_text("❌ Strava sync failed. Check logs for details.")
 
 
 async def handle_stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

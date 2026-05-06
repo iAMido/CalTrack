@@ -1,0 +1,17 @@
+.env
+.env.*
+settings.txt
+*.txt
+.git/
+.claude/
+data/
+__pycache__/
+*.pyc
+*.py[cod]
+.vscode/
+.idea/
+*.log
+bot_debug.log
+node_modules/
+.supabase/
+.railway/
