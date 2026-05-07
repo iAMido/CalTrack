@@ -5,10 +5,12 @@ A single-user, privacy-first calorie tracking system. Photograph meals via Teleg
 
 ## Architecture Overview
 - **Input**: Telegram Bot (`bot/`) — photo → OpenRouter Vision AI → inline keyboard confirmation
+- **Input**: Freeform `/add` command — Hebrew text → AI breakdown → nutrition calculation
 - **Database**: Supabase (PostgreSQL + Storage) — service_role key, all tables in public schema
+- **Dashboard**: Next.js web app (lives in `running-coach` repo at `/caltrack`) — meals CRUD, weight, overview
 - **Nutrition Data**: USDA SR Legacy + Foundation Foods (8,156 foods in `usda_foundation` table)
+- **Nutrition (freeform)**: AI-provided values (OpenRouter gpt-4o-mini) — used directly, not USDA matched
 - **Exercise**: Manual `/run` command (Strava planned for Stage 3)
-- **Analytics**: Streamlit dashboard (`dashboard/`) — Stage 3
 - **AI Coach**: Weekly report via OpenRouter, output in Hebrew — Stage 3
 - **Language**: Hebrew input supported everywhere via translation layer (gpt-4o-mini)
 
@@ -21,7 +23,7 @@ caltrack/
 │   │               # daily_summary.py, translator.py
 │   ├── db/         # supabase_client.py, queries.py, models.py
 │   └── utils/      # config.py, formatters.py, met_calculator.py
-├── dashboard/      # Streamlit analytics dashboard (Stage 3, not yet built)
+├── dashboard/      # (unused — dashboard lives in running-coach repo at /caltrack)
 ├── data/           # USDA JSON files (gitignored)
 └── scripts/        # One-time setup scripts
 ```
@@ -42,9 +44,32 @@ caltrack/
 | Stage | Features | Status |
 |-------|----------|--------|
 | 1 — MVP | Photo logging, inline confirmation, daily summary, /run /weight /water /undo | ✅ Complete |
-| 2 — Learning | /label, /add, per-item rename, Hebrew input, personal food history, auto-approve | ✅ Complete |
-| 3 — AI Coach | Weekly Hebrew report, Streamlit dashboard, BMR calibration, Strava sync | 📋 Planned |
-| 4 — Extras | Barcode scan, Garmin, reminders, Next.js dashboard | 📋 Future |
+| 2 — Learning | /label, /add (freeform AI), per-item rename, Hebrew input, meal editing, personal food history | ✅ Complete |
+| 2.5 — Dashboard | Next.js dashboard (in running-coach): meals CRUD, AI analysis, weight tracking, overview | ✅ Complete |
+| 3 — AI Coach | Weekly Hebrew report, BMR calibration, Strava sync | 📋 Planned |
+| 4 — Extras | Personal foods library, barcode scan, Garmin, reminders | 📋 Future |
+
+## Dashboard (Next.js — lives in running-coach repo)
+The CalTrack web dashboard is at `C:\Users\ido\running-coach\app\caltrack\`. It connects to the same Supabase database as the Telegram bot.
+
+**Dashboard pages:**
+- `/caltrack` — Overview: today's calories/macros, weight chart, weekly averages
+- `/caltrack/meals` — Meals list with add/edit/delete, AI analysis, date range filter
+- `/caltrack/weight` — Weight log
+- `/caltrack/foods` — Food database browser
+
+**Dashboard API routes** (`running-coach/app/api/caltrack/`):
+- `meals/route.ts` — GET meals list (with ingredient names)
+- `meals/add/route.ts` — POST new meal with ingredients
+- `meals/edit/route.ts` — PUT edit meal (type, ingredients, recalculate)
+- `meals/delete/route.ts` — DELETE meal (cascades: ai_corrections → meal_items → meal)
+- `analyze/route.ts` — POST AI food analysis (Hebrew → ingredients + nutrition)
+- `overview/route.ts` — GET daily summary + stats
+
+## Key Design Decisions
+- **Freeform `/add` uses AI nutrition directly** — not USDA fuzzy matching. USDA matching caused accuracy issues (e.g., "egg" matched "Egg, whole, dried" at 575 cal/100g). AI values from gpt-4o-mini are more accurate for freeform text input.
+- **Original Hebrew description saved in `meals.notes`** — displayed as meal title in dashboard instead of ingredient names. E.g., "3 מיני בורקסים" shows as the title.
+- **`weight_source` constraint** — `meal_items.weight_source` must be one of: `ai_estimate`, `user_confirmed`, `user_corrected`, `personal_db_auto`, `barcode_lookup`. Dashboard uses `ai_estimate` for new meals, `user_corrected` for edits.
 
 ## First-Time Setup
 ```bash
@@ -78,8 +103,9 @@ python -m bot.main
 The bot runs 24/7 on Railway. `master` branch is the production branch — every push triggers an automatic redeploy.
 
 **Railway files (safe to commit):**
-- `railway.toml` — build config (`builder = "nixpacks"`, `startCommand = "python -m bot.main"`)
-- `Dockerfile` — Docker container definition
+- `railway.toml` — build config (`startCommand = "python -m bot.main"`)
+- `Dockerfile` — Docker container definition (Railway auto-detects Dockerfile over nixpacks)
+- `.dockerignore` — must include `!requirements.txt` (has `*.txt` pattern that would exclude it)
 - `Procfile` — process type fallback
 
 **Railway files (gitignored):**
@@ -95,6 +121,8 @@ git push origin master   # triggers Railway redeploy (~2 min)
 ```
 
 **Dependency rule:** `python-telegram-bot==21.3` requires `httpx~=0.27`. Use `supabase>=2.7.0` — older supabase pins httpx<0.26 and causes a build conflict.
+
+**Important:** Only one bot instance can poll Telegram at a time. Running locally while Railway is active causes a 409 Conflict error. Kill local processes before deploying, or stop Railway before running locally.
 
 ## Security
 - Telegram: all updates checked against `TELEGRAM_ALLOWED_CHAT_ID`
