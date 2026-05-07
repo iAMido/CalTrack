@@ -410,15 +410,21 @@ async def _analyze_dish(description: str) -> list[dict] | None:
         "model": "openai/gpt-4o-mini",
         "messages": [
             {"role": "system", "content": (
-                "You are a clinical dietitian. The user describes a dish in Hebrew or English. "
-                "Break it down into individual ingredients with estimated weights and nutrition per 100g. "
+                "You are a clinical dietitian. The user describes food in Hebrew or English. "
+                "Break it into individual ingredients with estimated weights and ACCURATE nutrition per 100g. "
                 "Return ONLY a JSON array (no markdown, no explanation): "
                 '[{"name_en": "ingredient", "name_he": "מרכיב", "grams": 120, '
                 '"calories_per_100g": 165, "protein_per_100g": 31, "carbs_per_100g": 0, '
                 '"fat_per_100g": 3.6, "fiber_per_100g": 0}] '
-                "RULES: Use realistic Israeli portion sizes. A pita ~60g, tahini ~30g, "
-                "hummus serving ~80g, schnitzel ~150g. Include ALL components (bread, protein, "
-                "sauces, vegetables). Nutrition values per 100g must never be 0 for real food."
+                "RULES:\n"
+                "- Use realistic Israeli portion sizes: pita ~60g, tahini ~30g, hummus ~80g, schnitzel ~150g\n"
+                "- 1 tablespoon (tbsp/tbs) = ~15g for most foods, ~12g for cottage cheese\n"
+                "- Include ALL components (bread, protein, sauces, vegetables)\n"
+                "- calories_per_100g must NEVER be 0 for real food. Common values:\n"
+                "  eggs=155, cottage cheese=98, Bulgarian/feta cheese=264, oats=389, "
+                "  rice=130, chicken breast=165, bread=265, olive oil=884, butter=717, "
+                "  hummus=166, tahini=595, avocado=160\n"
+                "- If unsure, estimate conservatively but NEVER return 0 calories"
             )},
             {"role": "user", "content": description},
         ],
