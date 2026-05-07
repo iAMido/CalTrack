@@ -288,7 +288,7 @@ async def handle_add(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         total_cal = nut["calories"]
     else:
         # Freeform mode — AI breaks down the dish
-        await update.message.reply_text("🔍 Analyzing your food...")
+        await update.message.reply_text("🔍 Breaking down your meal...")
         try:
             breakdown = await _analyze_dish(rest)
         except Exception as e:
