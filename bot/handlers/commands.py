@@ -412,11 +412,13 @@ async def _analyze_dish(description: str) -> list[dict] | None:
         if content.startswith("```"):
             content = content.split("```")[1].lstrip("json").strip()
         result = _json.loads(content)
+        if isinstance(result, dict) and "ingredients" in result:
+            result = result["ingredients"]
         if isinstance(result, list) and len(result) > 0:
             return result
         return None
     except Exception as e:
-        logger.warning(f"Dish analysis failed for '{description}': {e}")
+        logger.error(f"Dish analysis failed for '{description}': {e}", exc_info=True)
         return None
 
 

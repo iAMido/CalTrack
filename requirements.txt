@@ -13,5 +13,8 @@ pydantic-settings==2.2.0
 # Timezone
 pytz==2024.1
 
+# HTTP client (used by vision, nutrition, coach, translator)
+httpx>=0.25.0
+
 # Async file I/O
 aiofiles==23.2.1
