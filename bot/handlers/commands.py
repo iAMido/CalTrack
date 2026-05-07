@@ -290,7 +290,11 @@ async def handle_add(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         # Freeform mode — AI breaks down the dish
         await update.message.reply_text("🔍 Breaking down your meal...")
         try:
-            breakdown = await _analyze_dish(rest)
+            import asyncio as _aio
+            breakdown = await _aio.wait_for(_analyze_dish(rest), timeout=25.0)
+        except _aio.TimeoutError:
+            await update.message.reply_text("❌ AI analysis timed out. Please try again.")
+            return
         except Exception as e:
             logger.error(f"Freeform analysis crashed: {e}", exc_info=True)
             await update.message.reply_text(f"❌ Analysis error: {e}")
@@ -393,48 +397,50 @@ async def handle_add(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
 async def _analyze_dish(description: str) -> list[dict] | None:
     """Ask AI to break down a dish into individual ingredients with nutrition."""
-    try:
-        import httpx, json as _json
-        from bot.utils.config import config as _cfg
-        payload = {
-            "model": "openai/gpt-4o-mini",
-            "messages": [
-                {"role": "system", "content": (
-                    "You are a clinical dietitian. The user describes a dish in Hebrew or English. "
-                    "Break it down into individual ingredients with estimated weights and nutrition per 100g. "
-                    "Return ONLY a JSON array (no markdown, no explanation): "
-                    '[{"name_en": "ingredient", "name_he": "מרכיב", "grams": 120, '
-                    '"calories_per_100g": 165, "protein_per_100g": 31, "carbs_per_100g": 0, '
-                    '"fat_per_100g": 3.6, "fiber_per_100g": 0}] '
-                    "RULES: Use realistic Israeli portion sizes. A pita ~60g, tahini ~30g, "
-                    "hummus serving ~80g, schnitzel ~150g. Include ALL components (bread, protein, "
-                    "sauces, vegetables). Nutrition values per 100g must never be 0 for real food."
-                )},
-                {"role": "user", "content": description},
-            ],
-            "temperature": 0.1,
-            "max_tokens": 800,
-        }
-        async with httpx.AsyncClient(timeout=20.0) as client:
-            r = await client.post(
-                f"{_cfg.openrouter_base_url}/chat/completions",
-                headers={"Authorization": f"Bearer {_cfg.openrouter_api_key}",
-                         "Content-Type": "application/json"},
-                json=payload,
-            )
-            r.raise_for_status()
-        content = r.json()["choices"][0]["message"]["content"].strip()
-        if content.startswith("```"):
-            content = content.split("```")[1].lstrip("json").strip()
-        result = _json.loads(content)
-        if isinstance(result, dict) and "ingredients" in result:
-            result = result["ingredients"]
-        if isinstance(result, list) and len(result) > 0:
-            return result
-        return None
-    except Exception as e:
-        logger.error(f"Dish analysis failed for '{description}': {e}", exc_info=True)
-        return None
+    import httpx, json as _json
+    from bot.utils.config import config as _cfg
+
+    logger.info(f"_analyze_dish called with: '{description}'")
+    payload = {
+        "model": "openai/gpt-4o-mini",
+        "messages": [
+            {"role": "system", "content": (
+                "You are a clinical dietitian. The user describes a dish in Hebrew or English. "
+                "Break it down into individual ingredients with estimated weights and nutrition per 100g. "
+                "Return ONLY a JSON array (no markdown, no explanation): "
+                '[{"name_en": "ingredient", "name_he": "מרכיב", "grams": 120, '
+                '"calories_per_100g": 165, "protein_per_100g": 31, "carbs_per_100g": 0, '
+                '"fat_per_100g": 3.6, "fiber_per_100g": 0}] '
+                "RULES: Use realistic Israeli portion sizes. A pita ~60g, tahini ~30g, "
+                "hummus serving ~80g, schnitzel ~150g. Include ALL components (bread, protein, "
+                "sauces, vegetables). Nutrition values per 100g must never be 0 for real food."
+            )},
+            {"role": "user", "content": description},
+        ],
+        "temperature": 0.1,
+        "max_tokens": 800,
+    }
+    logger.info("Sending request to OpenRouter...")
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        r = await client.post(
+            f"{_cfg.openrouter_base_url}/chat/completions",
+            headers={"Authorization": f"Bearer {_cfg.openrouter_api_key}",
+                     "Content-Type": "application/json"},
+            json=payload,
+        )
+        r.raise_for_status()
+    logger.info(f"OpenRouter responded: {r.status_code}")
+    content = r.json()["choices"][0]["message"]["content"].strip()
+    logger.info(f"AI content: {content[:200]}")
+    if content.startswith("```"):
+        content = content.split("```")[1].lstrip("json").strip()
+    result = _json.loads(content)
+    if isinstance(result, dict) and "ingredients" in result:
+        result = result["ingredients"]
+    if isinstance(result, list) and len(result) > 0:
+        return result
+    logger.warning(f"Unexpected AI response format: {content[:200]}")
+    return None
 
 
 async def _estimate_nutrition_text(food_name: str) -> dict | None:
