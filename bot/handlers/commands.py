@@ -312,19 +312,15 @@ async def handle_add(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         for ing in breakdown:
             try:
                 grams = int(ing.get("grams") or ing.get("estimated_grams") or 100)
-                fdc_id = nut_service.find_usda_match(ing["name_en"])
-                if fdc_id:
-                    nut = nut_service.calculate_nutrition(fdc_id, grams)
-                else:
-                    factor = grams / 100
-                    nut = {
-                        "calories": round(ing.get("calories_per_100g", 0) * factor),
-                        "protein_g": round(ing.get("protein_per_100g", 0) * factor, 1),
-                        "carbs_g": round(ing.get("carbs_per_100g", 0) * factor, 1),
-                        "fat_g": round(ing.get("fat_per_100g", 0) * factor, 1),
-                        "fiber_g": round(ing.get("fiber_per_100g", 0) * factor, 1),
-                    }
-                items.append({"name": ing["name_en"], "grams": grams, "fdc_id": fdc_id, **nut})
+                factor = grams / 100
+                nut = {
+                    "calories": round(ing.get("calories_per_100g", 0) * factor),
+                    "protein_g": round(ing.get("protein_per_100g", 0) * factor, 1),
+                    "carbs_g": round(ing.get("carbs_per_100g", 0) * factor, 1),
+                    "fat_g": round(ing.get("fat_per_100g", 0) * factor, 1),
+                    "fiber_g": round(ing.get("fiber_per_100g", 0) * factor, 1),
+                }
+                items.append({"name": ing["name_en"], "grams": grams, "fdc_id": None, **nut})
             except Exception as e:
                 logger.warning(f"Skipping ingredient {ing}: {e}")
                 continue
@@ -359,6 +355,7 @@ async def handle_add(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
             "total_carbs_g": total_nut["carbs_g"],
             "total_fat_g": total_nut["fat_g"],
             "total_fiber_g": total_nut["fiber_g"],
+            "notes": rest,
             "status": "confirmed",
         }, on_conflict="id")
 
@@ -417,13 +414,16 @@ async def _analyze_dish(description: str) -> list[dict] | None:
                 '"calories_per_100g": 165, "protein_per_100g": 31, "carbs_per_100g": 0, '
                 '"fat_per_100g": 3.6, "fiber_per_100g": 0}] '
                 "RULES:\n"
-                "- Use realistic Israeli portion sizes: pita ~60g, tahini ~30g, hummus ~80g, schnitzel ~150g\n"
+                "- ONLY include ingredients the user explicitly mentions. Do NOT add oil, butter, "
+                "seasoning, or cooking fat unless the user says so.\n"
+                "- For composite dishes (שווארמה בפיתה, סביח), include all named components.\n"
+                "- Use realistic Israeli portions: pita ~60g, tahini ~30g, hummus ~80g, schnitzel ~150g\n"
+                "- 1 egg = ~50g. An omelette from 2 eggs = 100g of egg, ~155 cal/100g = ~155 cal total.\n"
                 "- 1 tablespoon (tbsp/tbs) = ~15g for most foods, ~12g for cottage cheese\n"
-                "- Include ALL components (bread, protein, sauces, vegetables)\n"
-                "- calories_per_100g must NEVER be 0 for real food. Common values:\n"
-                "  eggs=155, cottage cheese=98, Bulgarian/feta cheese=264, oats=389, "
+                "- calories_per_100g must NEVER be 0. Common values:\n"
+                "  egg=155, cottage cheese=98, Bulgarian/feta cheese=264, oats=389, "
                 "  rice=130, chicken breast=165, bread=265, olive oil=884, butter=717, "
-                "  hummus=166, tahini=595, avocado=160\n"
+                "  hummus=166, tahini=595, avocado=160, burekas=360\n"
                 "- If unsure, estimate conservatively but NEVER return 0 calories"
             )},
             {"role": "user", "content": description},

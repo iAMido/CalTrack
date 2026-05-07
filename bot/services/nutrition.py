@@ -52,22 +52,43 @@ def calculate_nutrition(fdc_id: int | None, weight_grams: int, ai_fallback: dict
 
 
 def find_usda_match(ingredient_name: str) -> int | None:
-    """Find the best fdc_id for an ingredient name using simple word matching."""
+    """Find the best fdc_id for an ingredient name using scored matching."""
     if not ingredient_name or not _usda_cache:
         return None
-    name_lower = ingredient_name.lower()
+    name_lower = ingredient_name.lower().strip()
     name_words = set(name_lower.split())
 
     best_fdc_id = None
-    best_score = 0
+    best_score = 0.0
 
     for fdc_id, food in _usda_cache.items():
+        if not food.get("calories_per_100g"):
+            continue
         desc = (food.get("description") or "").lower()
-        desc_words = set(desc.split())
-        # Score = number of matching words
-        overlap = len(name_words & desc_words)
-        if overlap > best_score:
-            best_score = overlap
+        desc_clean = desc.split(",")[0].strip()
+        desc_words = set(w.strip(",()") for w in desc.split())
+
+        score = 0.0
+        overlap = name_words & desc_words
+
+        if not overlap:
+            continue
+
+        # Description starts with the ingredient name (strongest signal)
+        if desc_clean.startswith(name_lower) or desc.startswith(name_lower):
+            score = 200 + len(name_lower)
+        # Exact substring match
+        elif name_lower in desc:
+            score = 100 + len(name_lower)
+        else:
+            score = len(overlap)
+
+        # Prefer shorter/simpler descriptions (less chance of wrong match)
+        if len(desc_words) > 0:
+            score += (len(overlap) / len(desc_words)) * 20
+
+        if score > best_score:
+            best_score = score
             best_fdc_id = fdc_id
 
     return best_fdc_id if best_score >= 1 else None
