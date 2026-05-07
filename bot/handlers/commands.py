@@ -261,9 +261,17 @@ async def handle_add(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         await update.message.reply_text("⚠️ No profile found.")
         return
 
-    # Try precise mode first: "<grams>g <food name>"
+    # Try precise mode: "<number>g/ml <food>" or "<food> <number>g/ml"
     translated = await translate(rest)
-    match = re.match(r"(\d+(?:\.\d+)?)\s*g\s+(.+)", translated, re.IGNORECASE)
+    match = re.match(r"(\d+(?:\.\d+)?)\s*(?:g|ml)\s+(.+)", translated, re.IGNORECASE)
+    if not match:
+        match_rev = re.match(r"(.+?)\s+(\d+(?:\.\d+)?)\s*(?:g|ml)\s*$", translated, re.IGNORECASE)
+        if match_rev:
+            # Swap groups so grams is group 1, food is group 2
+            class _M:
+                def group(self, n):
+                    return match_rev.group(2) if n == 1 else match_rev.group(1)
+            match = _M()
 
     if match:
         # Precise mode — single ingredient with known weight
