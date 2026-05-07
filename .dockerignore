@@ -2,6 +2,7 @@
 .env.*
 settings.txt
 *.txt
+!requirements.txt
 .git/
 .claude/
 data/
