@@ -289,7 +289,13 @@ async def handle_add(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     else:
         # Freeform mode — AI breaks down the dish
         await update.message.reply_text("🔍 Analyzing your food...")
-        breakdown = await _analyze_dish(rest)
+        try:
+            breakdown = await _analyze_dish(rest)
+        except Exception as e:
+            logger.error(f"Freeform analysis crashed: {e}", exc_info=True)
+            await update.message.reply_text(f"❌ Analysis error: {e}")
+            return
+
         if not breakdown:
             await update.message.reply_text(
                 "❌ Could not analyze the food. Try being more specific or use the precise format:\n"
@@ -300,19 +306,28 @@ async def handle_add(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
         items = []
         for ing in breakdown:
-            fdc_id = nut_service.find_usda_match(ing["name_en"])
-            if fdc_id:
-                nut = nut_service.calculate_nutrition(fdc_id, ing["grams"])
-            else:
-                factor = ing["grams"] / 100
-                nut = {
-                    "calories": round(ing.get("calories_per_100g", 0) * factor),
-                    "protein_g": round(ing.get("protein_per_100g", 0) * factor, 1),
-                    "carbs_g": round(ing.get("carbs_per_100g", 0) * factor, 1),
-                    "fat_g": round(ing.get("fat_per_100g", 0) * factor, 1),
-                    "fiber_g": round(ing.get("fiber_per_100g", 0) * factor, 1),
-                }
-            items.append({"name": ing["name_en"], "grams": ing["grams"], "fdc_id": fdc_id, **nut})
+            try:
+                grams = int(ing.get("grams") or ing.get("estimated_grams") or 100)
+                fdc_id = nut_service.find_usda_match(ing["name_en"])
+                if fdc_id:
+                    nut = nut_service.calculate_nutrition(fdc_id, grams)
+                else:
+                    factor = grams / 100
+                    nut = {
+                        "calories": round(ing.get("calories_per_100g", 0) * factor),
+                        "protein_g": round(ing.get("protein_per_100g", 0) * factor, 1),
+                        "carbs_g": round(ing.get("carbs_per_100g", 0) * factor, 1),
+                        "fat_g": round(ing.get("fat_per_100g", 0) * factor, 1),
+                        "fiber_g": round(ing.get("fiber_per_100g", 0) * factor, 1),
+                    }
+                items.append({"name": ing["name_en"], "grams": grams, "fdc_id": fdc_id, **nut})
+            except Exception as e:
+                logger.warning(f"Skipping ingredient {ing}: {e}")
+                continue
+
+        if not items:
+            await update.message.reply_text("❌ Could not process any ingredients.")
+            return
 
         total_cal = sum(i["calories"] for i in items)
 
