@@ -210,12 +210,12 @@ async def handle_history(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 async def handle_add(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
-    /add [meal_type] <grams>g <food name>
+    /add [meal_type] <food description>
 
-    Examples:
-      /add lunch 15g olive oil
-      /add 200g white rice
-      /add dinner 120g grilled salmon
+    Supports two modes:
+      Precise:  /add lunch 150g chicken breast
+      Freeform: /add lunch פיתה שווארמה פרגית
+                /add סושי סלמון רול
     """
     if not _check_auth(update):
         return
@@ -223,122 +223,193 @@ async def handle_add(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     raw = " ".join(context.args) if context.args else ""
     if not raw:
         await update.message.reply_text(
-            "Usage: `/add [meal\\_type] <grams>g <food name>`\n"
-            "Example: `/add lunch 15g olive oil`\n"
-            "Hebrew also works: `/add צהריים 15 גרם שמן זית`",
+            "Usage: `/add [meal\\_type] <food description>`\n\n"
+            "*Precise:*\n"
+            "`/add lunch 150g chicken breast`\n\n"
+            "*Freeform (Hebrew/English):*\n"
+            "`/add lunch פיתה שווארמה פרגית`\n"
+            "`/add סושי סלמון רול`\n"
+            "`/add dinner חלה עם שניצל וחומוס`",
             parse_mode="Markdown",
         )
         return
 
-    raw = await translate(raw)
+    # Parse meal_type (optional first word, before translation)
+    meal_types_he = {"בוקר": "breakfast", "צהריים": "lunch", "ערב": "dinner", "חטיף": "snack", "נשנוש": "snack"}
+    meal_types_en = {"breakfast", "lunch", "dinner", "snack"}
 
-    # Parse meal_type (optional first word)
-    meal_types = {"breakfast", "lunch", "dinner", "snack"}
     words = raw.split()
-    if words[0].lower() in meal_types:
+    meal_type = None
+    rest = raw
+
+    if words[0].lower() in meal_types_en:
         meal_type = words[0].lower()
         rest = " ".join(words[1:])
-    else:
+    elif words[0] in meal_types_he:
+        meal_type = meal_types_he[words[0]]
+        rest = " ".join(words[1:])
+
+    if not meal_type:
         meal_type = detect_meal_type()
-        rest = raw
 
-    # Parse grams and food name: "<grams>g <name>"
-    match = re.match(r"(\d+(?:\.\d+)?)\s*g\s+(.+)", rest, re.IGNORECASE)
-    if not match:
-        await update.message.reply_text(
-            "Could not parse. Format: `/add lunch 15g olive oil`",
-            parse_mode="Markdown",
-        )
+    if not rest.strip():
+        await update.message.reply_text("Please describe what you ate.")
         return
-
-    grams = float(match.group(1))
-    food_name = match.group(2).strip()
 
     profile = await db_queries.get_user_profile()
     if not profile:
-        await update.message.reply_text("No user profile found.")
+        await update.message.reply_text("⚠️ No profile found.")
         return
 
-    # Find USDA match and calculate nutrition
-    fdc_id = nut_service.find_usda_match(food_name)
-    ai_fallback = None
-    if not fdc_id:
-        # Ask AI for nutrition estimate via a lightweight text call
-        ai_fallback = await _estimate_nutrition_text(food_name)
+    # Try precise mode first: "<grams>g <food name>"
+    translated = await translate(rest)
+    match = re.match(r"(\d+(?:\.\d+)?)\s*g\s+(.+)", translated, re.IGNORECASE)
 
-    nut = nut_service.calculate_nutrition(fdc_id, int(grams), ai_fallback)
+    if match:
+        # Precise mode — single ingredient with known weight
+        grams = float(match.group(1))
+        food_name = match.group(2).strip()
 
+        fdc_id = nut_service.find_usda_match(food_name)
+        ai_fallback = None
+        if not fdc_id:
+            ai_fallback = await _estimate_nutrition_text(food_name)
+
+        nut = nut_service.calculate_nutrition(fdc_id, int(grams), ai_fallback)
+        items = [{"name": food_name, "grams": int(grams), "fdc_id": fdc_id, **nut}]
+        total_cal = nut["calories"]
+    else:
+        # Freeform mode — AI breaks down the dish
+        await update.message.reply_text("🔍 Analyzing your food...")
+        breakdown = await _analyze_dish(rest)
+        if not breakdown:
+            await update.message.reply_text(
+                "❌ Could not analyze the food. Try being more specific or use the precise format:\n"
+                "`/add lunch 150g chicken breast`",
+                parse_mode="Markdown",
+            )
+            return
+
+        items = []
+        for ing in breakdown:
+            fdc_id = nut_service.find_usda_match(ing["name_en"])
+            if fdc_id:
+                nut = nut_service.calculate_nutrition(fdc_id, ing["grams"])
+            else:
+                factor = ing["grams"] / 100
+                nut = {
+                    "calories": round(ing.get("calories_per_100g", 0) * factor),
+                    "protein_g": round(ing.get("protein_per_100g", 0) * factor, 1),
+                    "carbs_g": round(ing.get("carbs_per_100g", 0) * factor, 1),
+                    "fat_g": round(ing.get("fat_per_100g", 0) * factor, 1),
+                    "fiber_g": round(ing.get("fiber_per_100g", 0) * factor, 1),
+                }
+            items.append({"name": ing["name_en"], "grams": ing["grams"], "fdc_id": fdc_id, **nut})
+
+        total_cal = sum(i["calories"] for i in items)
+
+    # Save to DB
     tz = pytz.timezone(config.user_timezone)
     today = datetime.now(tz).strftime("%Y-%m-%d")
+    meal_id = str(uuid.uuid4())
 
-    # Find today's meal of this type, or create one
-    client = db.get_client()
-    existing_meals = (
-        client.table("meals")
-        .select("id,total_calories,total_protein_g,total_carbs_g,total_fat_g,total_fiber_g")
-        .eq("meal_type", meal_type)
-        .eq("status", "confirmed")
-        .gte("eaten_at", f"{today}T00:00:00")
-        .lte("eaten_at", f"{today}T23:59:59")
-        .order("eaten_at", desc=True)
-        .limit(1)
-        .execute()
-        .data
-    )
+    total_nut = {
+        "calories": sum(i["calories"] for i in items),
+        "protein_g": round(sum(i["protein_g"] for i in items), 1),
+        "carbs_g": round(sum(i["carbs_g"] for i in items), 1),
+        "fat_g": round(sum(i["fat_g"] for i in items), 1),
+        "fiber_g": round(sum(i["fiber_g"] for i in items), 1),
+    }
 
-    if existing_meals:
-        meal_id = existing_meals[0]["id"]
-        # Update meal totals
-        old = existing_meals[0]
-        await db.update("meals", {"id": meal_id}, {
-            "total_calories": (old.get("total_calories") or 0) + nut["calories"],
-            "total_protein_g": round((old.get("total_protein_g") or 0) + nut["protein_g"], 2),
-            "total_carbs_g": round((old.get("total_carbs_g") or 0) + nut["carbs_g"], 2),
-            "total_fat_g": round((old.get("total_fat_g") or 0) + nut["fat_g"], 2),
-            "total_fiber_g": round((old.get("total_fiber_g") or 0) + nut["fiber_g"], 2),
+    await db.upsert("meals", {
+        "id": meal_id,
+        "user_id": profile["id"],
+        "meal_type": meal_type,
+        "eaten_at": datetime.now(tz).isoformat(),
+        "total_calories": total_nut["calories"],
+        "total_protein_g": total_nut["protein_g"],
+        "total_carbs_g": total_nut["carbs_g"],
+        "total_fat_g": total_nut["fat_g"],
+        "total_fiber_g": total_nut["fiber_g"],
+        "status": "confirmed",
+    }, on_conflict="id")
+
+    for item in items:
+        await db.insert("meal_items", {
+            "meal_id": meal_id,
+            "ingredient_name": item["name"],
+            "fdc_id": item.get("fdc_id"),
+            "weight_grams": item["grams"],
+            "weight_source": "user_text" if match else "ai_analysis",
+            "calories": item["calories"],
+            "protein_g": item["protein_g"],
+            "carbs_g": item["carbs_g"],
+            "fat_g": item["fat_g"],
+            "fiber_g": item["fiber_g"],
         })
-    else:
-        # Create a new meal entry
-        meal_id = str(uuid.uuid4())
-        await db.upsert("meals", {
-            "id": meal_id,
-            "user_id": profile["id"],
-            "meal_type": meal_type,
-            "eaten_at": datetime.now(tz).isoformat(),
-            "total_calories": nut["calories"],
-            "total_protein_g": nut["protein_g"],
-            "total_carbs_g": nut["carbs_g"],
-            "total_fat_g": nut["fat_g"],
-            "total_fiber_g": nut["fiber_g"],
-            "status": "confirmed",
-        }, on_conflict="id")
 
-    # Append meal item
-    await db.insert("meal_items", {
-        "meal_id": meal_id,
-        "ingredient_name": food_name,
-        "fdc_id": fdc_id,
-        "weight_grams": int(grams),
-        "weight_source": "user_text",
-        "calories": nut["calories"],
-        "protein_g": nut["protein_g"],
-        "carbs_g": nut["carbs_g"],
-        "fat_g": nut["fat_g"],
-        "fiber_g": nut["fiber_g"],
-    })
-
-    # Refresh daily summary
     daily = await db_queries.refresh_daily_summary(today, profile["id"])
-
     cal_in = daily.get("total_calories_in", 0)
     target = daily.get("target_calories", 2285)
     remaining = target - cal_in
 
+    # Build response with ingredient breakdown
+    if len(items) == 1:
+        item_str = f"*{items[0]['grams']}g {items[0]['name']}*"
+    else:
+        lines = [f"  • {i['name']} ({i['grams']}g) — {i['calories']} kcal" for i in items]
+        item_str = "\n".join(lines)
+
     await update.message.reply_text(
-        f"✅ Added *{int(grams)}g {food_name}* to {meal_type} ({nut['calories']} kcal)\n\n"
+        f"✅ Added to {meal_type} ({total_cal} kcal)\n"
+        f"{item_str}\n\n"
         f"Today: *{cal_in:,} / {target:,} kcal* | Remaining: *{remaining:,} kcal*",
         parse_mode="Markdown",
     )
+
+
+async def _analyze_dish(description: str) -> list[dict] | None:
+    """Ask AI to break down a dish into individual ingredients with nutrition."""
+    try:
+        import httpx, json as _json
+        from bot.utils.config import config as _cfg
+        payload = {
+            "model": "openai/gpt-4o-mini",
+            "messages": [
+                {"role": "system", "content": (
+                    "You are a clinical dietitian. The user describes a dish in Hebrew or English. "
+                    "Break it down into individual ingredients with estimated weights and nutrition per 100g. "
+                    "Return ONLY a JSON array (no markdown, no explanation): "
+                    '[{"name_en": "ingredient", "name_he": "מרכיב", "grams": 120, '
+                    '"calories_per_100g": 165, "protein_per_100g": 31, "carbs_per_100g": 0, '
+                    '"fat_per_100g": 3.6, "fiber_per_100g": 0}] '
+                    "RULES: Use realistic Israeli portion sizes. A pita ~60g, tahini ~30g, "
+                    "hummus serving ~80g, schnitzel ~150g. Include ALL components (bread, protein, "
+                    "sauces, vegetables). Nutrition values per 100g must never be 0 for real food."
+                )},
+                {"role": "user", "content": description},
+            ],
+            "temperature": 0.1,
+            "max_tokens": 800,
+        }
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            r = await client.post(
+                f"{_cfg.openrouter_base_url}/chat/completions",
+                headers={"Authorization": f"Bearer {_cfg.openrouter_api_key}",
+                         "Content-Type": "application/json"},
+                json=payload,
+            )
+            r.raise_for_status()
+        content = r.json()["choices"][0]["message"]["content"].strip()
+        if content.startswith("```"):
+            content = content.split("```")[1].lstrip("json").strip()
+        result = _json.loads(content)
+        if isinstance(result, list) and len(result) > 0:
+            return result
+        return None
+    except Exception as e:
+        logger.warning(f"Dish analysis failed for '{description}': {e}")
+        return None
 
 
 async def _estimate_nutrition_text(food_name: str) -> dict | None:
@@ -407,7 +478,7 @@ async def handle_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         "*— Logging —*\n"
         "📷 Send a photo — Log a meal\n"
         "🏷 `/label` — Scan a nutrition label → save custom food\n"
-        "➕ `/add lunch 150g chicken` — Manually add a food item\n"
+        "➕ `/add lunch פיתה שווארמה` — Add food \\(Hebrew/English, AI breakdown\\)\n"
         "⚖️ `/weight 87.3` — Log body weight\n"
         "💧 `/water 500` — Log water \\(ml\\)\n"
         "🏃 `/run 5.2 28:30 152` — Log a run \\(km, time, HR\\)\n\n"
