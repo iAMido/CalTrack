@@ -348,37 +348,42 @@ async def handle_add(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         "fiber_g": round(sum(i["fiber_g"] for i in items), 1),
     }
 
-    await db.upsert("meals", {
-        "id": meal_id,
-        "user_id": profile["id"],
-        "meal_type": meal_type,
-        "eaten_at": datetime.now(tz).isoformat(),
-        "total_calories": total_nut["calories"],
-        "total_protein_g": total_nut["protein_g"],
-        "total_carbs_g": total_nut["carbs_g"],
-        "total_fat_g": total_nut["fat_g"],
-        "total_fiber_g": total_nut["fiber_g"],
-        "status": "confirmed",
-    }, on_conflict="id")
+    try:
+        await db.upsert("meals", {
+            "id": meal_id,
+            "user_id": profile["id"],
+            "meal_type": meal_type,
+            "eaten_at": datetime.now(tz).isoformat(),
+            "total_calories": total_nut["calories"],
+            "total_protein_g": total_nut["protein_g"],
+            "total_carbs_g": total_nut["carbs_g"],
+            "total_fat_g": total_nut["fat_g"],
+            "total_fiber_g": total_nut["fiber_g"],
+            "status": "confirmed",
+        }, on_conflict="id")
 
-    for item in items:
-        await db.insert("meal_items", {
-            "meal_id": meal_id,
-            "ingredient_name": item["name"],
-            "fdc_id": item.get("fdc_id"),
-            "weight_grams": item["grams"],
-            "weight_source": "user_text" if match else "ai_analysis",
-            "calories": item["calories"],
-            "protein_g": item["protein_g"],
-            "carbs_g": item["carbs_g"],
-            "fat_g": item["fat_g"],
-            "fiber_g": item["fiber_g"],
-        })
+        for item in items:
+            await db.insert("meal_items", {
+                "meal_id": meal_id,
+                "ingredient_name": item["name"],
+                "fdc_id": item.get("fdc_id"),
+                "weight_grams": item["grams"],
+                "weight_source": "user_confirmed" if match else "ai_estimate",
+                "calories": item["calories"],
+                "protein_g": item["protein_g"],
+                "carbs_g": item["carbs_g"],
+                "fat_g": item["fat_g"],
+                "fiber_g": item["fiber_g"],
+            })
 
-    daily = await db_queries.refresh_daily_summary(today, profile["id"])
-    cal_in = daily.get("total_calories_in", 0)
-    target = daily.get("target_calories", 2285)
-    remaining = target - cal_in
+        daily = await db_queries.refresh_daily_summary(today, profile["id"])
+        cal_in = daily.get("total_calories_in", 0)
+        target = daily.get("target_calories", 2285)
+        remaining = target - cal_in
+    except Exception as e:
+        logger.error(f"Failed to save meal: {e}")
+        await update.message.reply_text(f"❌ Failed to save: {e}")
+        return
 
     # Build response with ingredient breakdown
     if len(items) == 1:
