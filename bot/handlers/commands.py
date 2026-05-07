@@ -382,16 +382,15 @@ async def handle_add(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         await update.message.reply_text(f"❌ Failed to save: {e}")
         return
 
-    # Build response with ingredient breakdown
-    if len(items) == 1:
-        item_str = f"*{items[0]['grams']}g {items[0]['name']}*"
-    else:
-        lines = [f"  • {i['name']} ({i['grams']}g) — {i['calories']} kcal" for i in items]
-        item_str = "\n".join(lines)
+    # Build response with description + ingredient breakdown
+    desc_line = f"*{rest}*\n" if not match else ""
+    lines = [f"  • {i['name']} ({i['grams']}g) — {i['calories']} kcal" for i in items]
+    item_str = "\n".join(lines)
 
     await update.message.reply_text(
-        f"✅ Added to {meal_type} ({total_cal} kcal)\n"
-        f"{item_str}\n\n"
+        f"✅ Added to {meal_type}\n"
+        f"{desc_line}{item_str}\n"
+        f"*Total: {total_cal} kcal*\n\n"
         f"Today: *{cal_in:,} / {target:,} kcal* | Remaining: *{remaining:,} kcal*",
         parse_mode="Markdown",
     )
