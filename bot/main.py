@@ -66,7 +66,15 @@ async def strava_sync_job(context) -> None:
         if not imported:
             logger.info("Strava sync: no new runs.")
     except Exception as e:
-        logger.error(f"Strava sync job failed: {e}")
+        logger.error(f"Strava sync job failed: {e}", exc_info=True)
+        try:
+            await context.bot.send_message(
+                chat_id=config.telegram_allowed_chat_id,
+                text=f"❌ Strava auto-sync failed:\n`{e}`",
+                parse_mode="Markdown",
+            )
+        except Exception:
+            pass
 
 
 async def weekly_coach_job(context) -> None:
