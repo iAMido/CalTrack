@@ -151,7 +151,7 @@ def parse_strava_activity(activity: dict, user_weight_kg: float) -> dict:
         "avg_pace_sec_per_km": pace_sec_per_km,
         "avg_heart_rate": int(avg_hr) if avg_hr else None,
         "calories_burned": int(calories),
-        "elevation_gain_m": activity.get("total_elevation_gain"),
+        "elevation_gain_m": int(activity.get("total_elevation_gain") or 0),
         "source": "strava",
         "external_id": str(activity["id"]),
         "external_url": f"https://www.strava.com/activities/{activity['id']}",
