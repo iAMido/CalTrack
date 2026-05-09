@@ -19,25 +19,97 @@ def is_configured() -> bool:
     return bool(config.strava_client_id and config.strava_client_secret and config.strava_refresh_token)
 
 
+async def _get_stored_token() -> dict | None:
+    """Read stored token from DB (survives token rotation)."""
+    try:
+        client = db.get_client()
+        result = (
+            client.table("strava_tokens")
+            .select("access_token,refresh_token,expires_at")
+            .limit(1)
+            .single()
+            .execute()
+        )
+        return result.data
+    except Exception:
+        return None
+
+
+async def _save_token(access_token: str, refresh_token: str, expires_at: int, user_id: str) -> None:
+    """Save/update token in DB so the rotated refresh_token is preserved."""
+    try:
+        client = db.get_client()
+        token_data = {
+            "user_id": user_id,
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "expires_at": datetime.utcfromtimestamp(expires_at).isoformat(),
+            "updated_at": datetime.utcnow().isoformat(),
+        }
+        # Try upsert — if table doesn't exist yet, just log warning
+        existing = await _get_stored_token()
+        if existing:
+            client.table("strava_tokens").update(token_data).neq("id", "00000000-0000-0000-0000-000000000000").execute()
+        else:
+            client.table("strava_tokens").insert(token_data).execute()
+        logger.info("Strava token saved to DB")
+    except Exception as e:
+        logger.warning(f"Could not save Strava token to DB (table may not exist): {e}")
+
+
+async def _get_refresh_token() -> str:
+    """Get the latest refresh token: DB first (survives rotation), env var as fallback."""
+    stored = await _get_stored_token()
+    if stored and stored.get("refresh_token"):
+        logger.info("Using Strava refresh token from DB")
+        return stored["refresh_token"]
+    logger.info("Using Strava refresh token from env var")
+    return config.strava_refresh_token
+
+
 async def refresh_access_token() -> str:
+    """Refresh the Strava access token. Saves the new (rotated) refresh token to DB."""
+    refresh_token = await _get_refresh_token()
+
     async with httpx.AsyncClient(timeout=30.0) as client:
         response = await client.post(STRAVA_TOKEN_URL, data={
             "client_id": config.strava_client_id,
             "client_secret": config.strava_client_secret,
-            "refresh_token": config.strava_refresh_token,
+            "refresh_token": refresh_token,
             "grant_type": "refresh_token",
         })
         response.raise_for_status()
 
+    data = response.json()
     global _access_token
-    _access_token = response.json()["access_token"]
+    _access_token = data["access_token"]
+
+    # Strava rotates refresh tokens — save the new one
+    new_refresh = data.get("refresh_token", refresh_token)
+    expires_at = data.get("expires_at", 0)
+
+    profile = await db_queries.get_user_profile()
+    user_id = profile["id"] if profile else None
+    if user_id:
+        await _save_token(_access_token, new_refresh, expires_at, user_id)
+
     return _access_token
 
 
 async def _get_token() -> str:
+    """Get a valid access token, refreshing if needed."""
     global _access_token
-    if not _access_token:
-        _access_token = await refresh_access_token()
+
+    # Check if stored token is still valid
+    stored = await _get_stored_token()
+    if stored and stored.get("access_token") and stored.get("expires_at"):
+        expires = datetime.fromisoformat(stored["expires_at"].replace("Z", "+00:00"))
+        if expires > datetime.now(expires.tzinfo or pytz.UTC):
+            _access_token = stored["access_token"]
+            return _access_token
+
+    # Need to refresh
+    _access_token = await refresh_access_token()
     return _access_token
 
 
