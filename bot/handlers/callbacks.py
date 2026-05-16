@@ -24,7 +24,11 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     await query.answer()
     data = query.data
 
-    if data.startswith("w:"):
+    if data.startswith("bc_gram_"):
+        from bot.handlers.barcode import handle_barcode_gram_callback
+        grams = int(data.split("_")[2])
+        await handle_barcode_gram_callback(update, context, grams)
+    elif data.startswith("w:"):
         await _handle_weight_selection(query, context, data)
     elif data == "ok":
         await _handle_confirm_all(query, context)

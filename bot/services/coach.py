@@ -206,7 +206,22 @@ Analyze this week and produce your full report in Hebrew.
         logger.error(f"AI Coach API error: {e}")
         return "❌ שגיאה ביצירת הדוח השבועי. נסה שוב מאוחר יותר."
 
-    return response.json()["choices"][0]["message"]["content"]
+    report_text = response.json()["choices"][0]["message"]["content"]
+
+    # Persist report to DB for dashboard history
+    try:
+        client = db.get_client()
+        client.table("coach_reports").insert({
+            "user_id": user_id,
+            "week_start": sunday,
+            "week_end": saturday,
+            "report_text": report_text,
+        }).execute()
+        logger.info(f"Coach report saved to DB: {sunday} to {saturday}")
+    except Exception as e:
+        logger.warning(f"Could not save coach report to DB (non-fatal): {e}")
+
+    return report_text
 
 
 def split_for_telegram(text: str, max_len: int = 4000) -> list[str]:

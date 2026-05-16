@@ -11,6 +11,7 @@ from bot.services import vision, nutrition, personal_foods as pf
 from bot.db import supabase_client as db
 from bot.db import queries as db_queries
 from bot.handlers.label import handle_label_photo
+from bot.handlers.barcode import handle_barcode_photo
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +20,11 @@ ALLOWED_CHAT_IDS = config.allowed_chat_ids
 
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if update.effective_chat.id not in ALLOWED_CHAT_IDS:
+        return
+
+    # Barcode scan mode (user sent /barcode first)
+    if context.user_data.get("waiting_for") == "barcode":
+        await handle_barcode_photo(update, context)
         return
 
     # Label scan takes priority over meal analysis

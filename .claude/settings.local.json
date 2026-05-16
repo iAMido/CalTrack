@@ -16,7 +16,17 @@
       "Bash(git config *)",
       "Bash(git commit -m ' *)",
       "Bash(git push *)",
-      "Bash(python scripts/seed_profile.py)"
+      "Bash(python scripts/seed_profile.py)",
+      "Bash(python -m bot.main)",
+      "Bash(taskkill /F /IM python.exe)",
+      "PowerShell(Get-Process python -ErrorAction SilentlyContinue)",
+      "PowerShell(Stop-Process -Force)",
+      "Bash(python scripts/import_usda.py)",
+      "Bash(Get-Process python *)",
+      "Bash(Stop-Process -Force)",
+      "Bash(python -)",
+      "mcp__Claude_in_Chrome__tabs_context_mcp",
+      "Bash(git commit *)"
     ]
   }
 }

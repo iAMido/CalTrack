@@ -28,6 +28,7 @@ from bot.handlers.commands import (
     handle_add,
 )
 from bot.handlers.label import handle_label
+from bot.handlers.barcode import handle_barcode_command
 from bot.handlers.callbacks import handle_callback, handle_text_input
 from bot.handlers.admin import handle_calibrate, handle_stats, handle_syncstrava
 
@@ -157,6 +158,7 @@ def main() -> None:
     app.add_handler(CommandHandler("stats", handle_stats, filters=auth))
     app.add_handler(CommandHandler("syncstrava", handle_syncstrava, filters=auth))
     app.add_handler(CommandHandler("help", handle_help, filters=auth))
+    app.add_handler(CommandHandler("barcode", handle_barcode_command, filters=auth))
 
     # Photo handler
     app.add_handler(MessageHandler(filters.PHOTO & auth, handle_photo))
