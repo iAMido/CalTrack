@@ -6,21 +6,24 @@ A single-user, privacy-first calorie tracking system. Photograph meals via Teleg
 ## Architecture Overview
 - **Input**: Telegram Bot (`bot/`) — photo → OpenRouter Vision AI → inline keyboard confirmation
 - **Input**: Freeform `/add` command — Hebrew text → AI breakdown → nutrition calculation
+- **Input**: `/barcode` command — photo → pyzbar decode → Open Food Facts API → save meal
+- **Input**: `/template` command — one-tap re-logging from saved meal templates
 - **Database**: Supabase (PostgreSQL + Storage) — service_role key, all tables in public schema
-- **Dashboard**: Next.js web app (lives in `running-coach` repo at `/caltrack`) — meals CRUD, weight, overview
+- **Dashboard**: Next.js web app (lives in `running-coach` repo at `/caltrack`) — meals CRUD, weight, overview, coach reports
 - **Nutrition Data**: USDA SR Legacy + Foundation Foods (8,156 foods in `usda_foundation` table)
 - **Nutrition (freeform)**: AI-provided values (OpenRouter gpt-4o-mini) — used directly, not USDA matched
-- **Exercise**: Manual `/run` command (Strava planned for Stage 3)
-- **AI Coach**: Weekly report via OpenRouter, output in Hebrew — Stage 3
+- **Exercise**: Manual `/run` command + Strava sync (daily 22:00 cron + `/syncstrava`)
+- **AI Coach**: Weekly Hebrew report (Saturday 22:00) — saved to DB + displayed in dashboard
 - **Language**: Hebrew input supported everywhere via translation layer (gpt-4o-mini)
 
 ## Directory Map
 ```
 caltrack/
 ├── bot/            # Telegram bot — core application
-│   ├── handlers/   # photo.py, commands.py, callbacks.py, admin.py, label.py
+│   ├── handlers/   # photo.py, commands.py, callbacks.py, admin.py, label.py,
+│   │               # barcode.py, template.py
 │   ├── services/   # vision.py, nutrition.py, personal_foods.py, calibration.py,
-│   │               # daily_summary.py, translator.py
+│   │               # daily_summary.py, translator.py, barcode.py, coach.py
 │   ├── db/         # supabase_client.py, queries.py, models.py
 │   └── utils/      # config.py, formatters.py, met_calculator.py
 ├── dashboard/      # (unused — dashboard lives in running-coach repo at /caltrack)
@@ -36,8 +39,13 @@ caltrack/
 - `bot/services/vision.py` — OpenRouter vision AI (meal photos) + label extraction
 - `bot/services/nutrition.py` — 8k USDA in-memory cache + fuzzy matcher + AI fallback
 - `bot/services/translator.py` — Hebrew→English translation (fast local map + gpt-4o-mini)
+- `bot/services/barcode.py` — pyzbar decode + Open Food Facts product lookup
+- `bot/services/coach.py` — weekly AI report generation + DB persistence
 - `bot/handlers/label.py` — `/label` command: scan nutrition label → save custom food
+- `bot/handlers/barcode.py` — `/barcode` command: photo → decode → lookup → save meal
+- `bot/handlers/template.py` — `/template` command: one-tap logging from saved templates
 - `scripts/import_usda.py` — imports Foundation Foods + SR Legacy + FNDDS (any available)
+- `scripts/schema_stage3.sql` — DDL for coach_reports, meal_templates, meal_template_items
 - `.env` — local secrets (gitignored)
 
 ## Development Stages
@@ -46,8 +54,9 @@ caltrack/
 | 1 — MVP | Photo logging, inline confirmation, daily summary, /run /weight /water /undo | ✅ Complete |
 | 2 — Learning | /label, /add (freeform AI), per-item rename, Hebrew input, meal editing, personal food history | ✅ Complete |
 | 2.5 — Dashboard | Next.js dashboard (in running-coach): meals CRUD, AI analysis, weight tracking, overview | ✅ Complete |
-| 3 — AI Coach | Weekly Hebrew report, BMR calibration, Strava sync | 📋 Planned |
-| 4 — Extras | Personal foods library, barcode scan, Garmin, reminders | 📋 Future |
+| 3 — AI Coach | Weekly Hebrew report, BMR calibration, Strava sync, coach reports saved to DB | ✅ Complete |
+| 3.5 — Templates & Barcode | /template command, /barcode command, meal photos in dashboard, personal foods in Add Meal | ✅ Complete |
+| 4 — Extras | Garmin sync, reminders, photo improvements | 📋 Future |
 
 ## Dashboard (Next.js — lives in running-coach repo)
 The CalTrack web dashboard is at `C:\Users\ido\running-coach\app\caltrack\`. It connects to the same Supabase database as the Telegram bot.

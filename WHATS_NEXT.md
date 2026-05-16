@@ -1,70 +1,45 @@
 # CalTrack — What's Next
 
-## Next Up: Personal Foods Library
+## Recently Completed (2026-05-16)
 
-### Problem
-Every time a user logs "burekas" or "shakshuka", the AI re-analyzes it from scratch. Common personal foods should be saved once and reused — faster, more consistent, and allows the user to correct nutrition values once.
+### Stage 3 — AI Coach + Strava + Calibration
+- **BMR Calibration** — `/calibrate` command, auto-recalibrate on weight milestones
+- **Strava Sync** — OAuth connected, daily sync at 22:00, `/syncstrava` manual trigger
+- **AI Weekly Coach** — Saturday 22:00 report in Hebrew, saved to `coach_reports` table
+- **Coach Reports Dashboard** — `/caltrack/coach` page with expandable RTL reports
 
-### What Already Exists
-- **Table**: `personal_foods` in Supabase (already created in schema)
-- **Service**: `bot/services/personal_foods.py` — has basic lookup/save logic
-- **Handler scaffolding**: personal foods referenced in photo flow but not fully wired
-
-### Plan
-1. **Auto-save confirmed meals** — After a user confirms a meal via inline keyboard, save each ingredient to `personal_foods` with its nutrition values. If it already exists, update the average or keep the latest.
-
-2. **Priority lookup on `/add`** — When processing freeform `/add`, check `personal_foods` first before calling OpenRouter AI. If the user types "burekas", and we have it saved with 350 cal/100g, use that directly.
-
-3. **Dashboard food library page** — The `/caltrack/foods` page in running-coach should show personal foods, allow editing nutrition values, and deleting entries.
-
-4. **Telegram `/foods` command** — List saved personal foods, allow deletion.
-
-### Database Schema (already exists)
-```sql
-personal_foods (
-  id uuid PK,
-  user_id uuid FK,
-  food_name text,
-  food_name_he text,
-  fdc_id int,
-  calories_per_100g numeric,
-  protein_per_100g numeric,
-  carbs_per_100g numeric,
-  fat_per_100g numeric,
-  fiber_per_100g numeric,
-  default_weight_grams int,
-  use_count int DEFAULT 0,
-  created_at timestamptz,
-  updated_at timestamptz
-)
-```
+### Stage 3.5 — Templates, Barcode, Photos
+- **Barcode Scanning** — `/barcode` command: send photo of barcode → pyzbar decodes → Open Food Facts lookup → log meal with nutrition
+- **Meal Templates** — Save full meals from dashboard, `/template` or `/t` in Telegram to log instantly
+- **Meal Photos in Dashboard** — Signed URLs from Supabase Storage, thumbnails in meal list
+- **Personal Foods in Add Meal** — Dashboard "My Foods" tab in Add Meal modal for quick re-use
+- **DB Schema** — `coach_reports`, `meal_templates`, `meal_template_items` tables created
 
 ---
 
-## Stage 3 Features (Planned)
+## Remaining Polish & Improvements
 
-### BMR Calibration
-- Track actual weight change vs. calorie intake over time
-- Calculate real TDEE from data (not just Harris-Benedict estimate)
-- Adjust `target_daily_calories` based on observed deficit/surplus
+### Personal Foods — Deeper Integration
+- [ ] Auto-save confirmed meals to `personal_foods` (currently relies on photo flow only)
+- [ ] `/foods` Telegram command to list/delete personal foods
+- [ ] Priority lookup in `/add` — check personal_foods before calling AI
 
-### Strava Sync
-- OAuth connect to Strava
-- Daily sync at 22:00 (Israel time) via cron job
-- Import runs → `runs` table → update `daily_summary.total_calories_out`
+### Dashboard Enhancements
+- [ ] Meal photo lightbox (click thumbnail to see full image)
+- [ ] Template management page (edit/delete templates from dashboard)
+- [ ] Foods page improvements (edit nutrition values, delete entries)
 
-### AI Weekly Coach Report
-- Runs every Saturday at 22:00 (week = Sunday–Saturday)
-- Analyzes: calorie adherence, macro balance, weight trend, exercise
-- Output in Hebrew via Telegram message
-- Uses Claude (anthropic/claude-sonnet) via OpenRouter
+### Bot Quality of Life
+- [ ] `/template` with meal type override: `/t lunch burger meal`
+- [ ] Barcode — handle multiple barcodes in one image
+- [ ] Better error messages when Open Food Facts has no data for a barcode
 
 ---
 
 ## Stage 4 Ideas (Future)
 
-- **Barcode scanning** — Scan product barcode via Telegram photo → lookup in Open Food Facts API
 - **Garmin sync** — Import heart rate, steps, calories burned
 - **Meal reminders** — Telegram notifications if no meal logged by certain time
-- **Meal templates** — Save full meals (not just ingredients) for quick re-logging
-- **Photo improvements** — Better photo storage URLs, thumbnail generation
+- **Photo improvements** — Thumbnail generation, image compression
+- **Weekly trends chart** — Visual weight/calorie trend in dashboard
+- **Export** — CSV/PDF export of meal history
