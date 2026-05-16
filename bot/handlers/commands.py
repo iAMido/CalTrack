@@ -520,6 +520,7 @@ async def handle_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         "📷 Send a photo — Log a meal\n"
         "🏷 `/label` — Scan a nutrition label → save custom food\n"
         "➕ `/add lunch פיתה שווארמה` — Add food \\(Hebrew/English, AI breakdown\\)\n"
+        "📋 `/template` or `/t` — Log a saved meal template instantly\n"
         "⚖️ `/weight 87.3` — Log body weight\n"
         "💧 `/water 500` — Log water \\(ml\\)\n"
         "🏃 `/run 5.2 28:30 152` — Log a run \\(km, time, HR\\)\n\n"

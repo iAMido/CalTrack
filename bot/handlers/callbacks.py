@@ -24,7 +24,11 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     await query.answer()
     data = query.data
 
-    if data.startswith("bc_gram_"):
+    if data.startswith("tmpl:"):
+        from bot.handlers.template import handle_template_callback
+        template_id = data.split(":", 1)[1]
+        await handle_template_callback(update, context, template_id)
+    elif data.startswith("bc_gram_"):
         from bot.handlers.barcode import handle_barcode_gram_callback
         grams = int(data.split("_")[2])
         await handle_barcode_gram_callback(update, context, grams)
