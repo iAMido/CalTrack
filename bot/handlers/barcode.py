@@ -172,41 +172,18 @@ async def handle_barcode_gram_callback(
             "fat_g": fat,
             "fiber_g": fiber,
         })
-
-        # Refresh daily summary
-        day_meals_res = (
-            db.get_client()
-            .table("meals")
-            .select("total_calories,total_protein_g,total_carbs_g,total_fat_g,total_fiber_g")
-            .eq("user_id", user_id)
-            .eq("status", "confirmed")
-            .gte("eaten_at", f"{today}T00:00:00")
-            .lte("eaten_at", f"{today}T23:59:59")
-            .execute()
-        )
-        if day_meals_res.data:
-            day = day_meals_res.data
-            dc = sum(m["total_calories"] or 0 for m in day)
-            dp = sum(m["total_protein_g"] or 0 for m in day)
-            dcarb = sum(m["total_carbs_g"] or 0 for m in day)
-            df = sum(m["total_fat_g"] or 0 for m in day)
-            dfib = sum(m["total_fiber_g"] or 0 for m in day)
-            await db.upsert("daily_summary", {
-                "user_id": user_id,
-                "date": today,
-                "total_calories_in": dc,
-                "total_protein_g": round(dp * 10) / 10,
-                "total_carbs_g": round(dcarb * 10) / 10,
-                "total_fat_g": round(df * 10) / 10,
-                "total_fiber_g": round(dfib * 10) / 10,
-                "target_calories": profile.get("target_daily_calories", 2000),
-                "net_calories": dc,
-            }, on_conflict="user_id,date")
-
-        await query.edit_message_text(
-            f"✅ Logged *{nutrition['name']}* ({grams} g) — *{cal} kcal*",
-            parse_mode="Markdown",
-        )
     except Exception as e:
         logger.error(f"Barcode meal save error: {e}")
         await query.edit_message_text("❌ Failed to save meal. Please try again.")
+        return
+
+    # Refresh daily summary (non-fatal — meal is already saved)
+    try:
+        daily = await db_queries.refresh_daily_summary(today, user_id)
+    except Exception as e:
+        logger.warning(f"Barcode daily summary refresh failed (non-fatal): {e}")
+
+    await query.edit_message_text(
+        f"✅ Logged *{nutrition['name']}* ({grams} g) — *{cal} kcal*",
+        parse_mode="Markdown",
+    )
