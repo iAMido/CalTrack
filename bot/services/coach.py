@@ -31,21 +31,27 @@ YOUR REPORT MUST INCLUDE THESE SECTIONS:
 
 3. 📈 מגמת משקל (Weight Trend)
    - Weight change this week
-   - Compare to last week if data available
+   - Compare to last week using PREVIOUS_WEEK_SUMMARY block (do NOT make up numbers)
 
 4. 🔍 דפוסים (Pattern Detection)
    - Late-night eating patterns
    - Weekend vs weekday differences
    - Post-exercise eating (overcompensation?)
-   - Recurring high-calorie, low-nutrient foods
+   - Recurring high-calorie, low-nutrient foods (cross-reference TOP_FOODS_LAST_4W)
 
-5. ✅ המלצות לשבוע הבא (3 Action Items)
+5. 🎯 מעקב אחר ההמלצות הקודמות (Previous Week Adherence)
+   - Read PREVIOUS_COACH_REPORT. For each of the previous report's 3 action items, grade adherence:
+     ✅ followed, ⚠️ partial, ❌ ignored. Cite specific evidence from this week's data.
+   - If there is no previous report, skip this section.
+
+6. ✅ המלצות לשבוע הבא (3 Action Items)
    - Exactly 3 specific, actionable recommendations
    - Ranked by expected impact on deficit
    - Include specific calorie numbers
+   - Do NOT repeat verbatim what was in the previous report — build on it
 
-6. 🍽 מתכונים מומלצים (2 Recipe Suggestions)
-   - Match the client's food preferences
+7. 🍽 מתכונים מומלצים (2 Recipe Suggestions)
+   - Match the client's TOP_FOODS_LAST_4W preferences
    - High protein, moderate calorie
    - Simple to prepare (< 30 min)
    - Include estimated calories and macros per serving"""
@@ -61,8 +67,180 @@ def get_week_boundaries() -> tuple[str, str]:
     return sunday.strftime("%Y-%m-%d"), saturday.strftime("%Y-%m-%d")
 
 
+def _previous_week_boundaries(sunday_str: str) -> tuple[str, str]:
+    """Sun-Sat boundaries for the week immediately before the given Sunday."""
+    sunday = datetime.strptime(sunday_str, "%Y-%m-%d")
+    prev_sat = sunday - timedelta(days=1)
+    prev_sun = prev_sat - timedelta(days=6)
+    return prev_sun.strftime("%Y-%m-%d"), prev_sat.strftime("%Y-%m-%d")
+
+
+async def _rebuild_daily_summaries_for_window(
+    user_id: str, start_date: str, end_date: str
+) -> None:
+    """Defensive: recompute daily_summary rows from raw meals for the given
+    inclusive date window (Israel-local). Bypasses any drift caused by
+    dashboard upserts that may have missed or hit the wrong date."""
+    client = db.get_client()
+    try:
+        # Fetch every confirmed meal whose Israel-local date falls in [start, end]
+        # We pull a slightly wider UTC window then group locally.
+        start_utc = f"{start_date}T00:00:00+00:00"
+        # End-of-day Israel = 23:59 + ~3h offset → next day 02:59 UTC. Pad to next day 23:59 UTC for safety.
+        end_dt = datetime.strptime(end_date, "%Y-%m-%d") + timedelta(days=1)
+        end_utc = f"{end_dt.strftime('%Y-%m-%d')}T23:59:59+00:00"
+
+        meals_resp = (
+            client.table("meals")
+            .select("eaten_at,total_calories,total_protein_g,total_carbs_g,total_fat_g,total_fiber_g")
+            .eq("user_id", user_id)
+            .eq("status", "confirmed")
+            .gte("eaten_at", start_utc)
+            .lte("eaten_at", end_utc)
+            .execute()
+        )
+        meals = meals_resp.data or []
+
+        tz = pytz.timezone(config.user_timezone)
+        by_date: dict[str, dict] = {}
+        for m in meals:
+            eaten_at = m.get("eaten_at")
+            if not eaten_at:
+                continue
+            try:
+                # Normalise to aware datetime in Israel TZ
+                dt = datetime.fromisoformat(str(eaten_at).replace("Z", "+00:00"))
+                dt_local = dt.astimezone(tz)
+            except Exception:
+                continue
+            d = dt_local.strftime("%Y-%m-%d")
+            if d < start_date or d > end_date:
+                continue
+            bucket = by_date.setdefault(d, {
+                "cal": 0, "p": 0.0, "c": 0.0, "f": 0.0, "fib": 0.0, "n": 0,
+            })
+            bucket["cal"] += m.get("total_calories") or 0
+            bucket["p"]   += float(m.get("total_protein_g") or 0)
+            bucket["c"]   += float(m.get("total_carbs_g") or 0)
+            bucket["f"]   += float(m.get("total_fat_g") or 0)
+            bucket["fib"] += float(m.get("total_fiber_g") or 0)
+            bucket["n"]   += 1
+
+        # Upsert one row per date. Uses (user_id, date) conflict resolution.
+        for d, agg in by_date.items():
+            await db.upsert("daily_summary", {
+                "user_id": user_id,
+                "date": d,
+                "total_calories_in": agg["cal"],
+                "total_protein_g": round(agg["p"], 1),
+                "total_carbs_g": round(agg["c"], 1),
+                "total_fat_g": round(agg["f"], 1),
+                "total_fiber_g": round(agg["fib"], 1),
+                "meal_count": agg["n"],
+            }, on_conflict="user_id,date")
+        logger.info(
+            f"Rebuilt daily_summary for {len(by_date)} day(s) "
+            f"in window {start_date}..{end_date}"
+        )
+    except Exception as e:
+        # Non-fatal — coach falls back to whatever is already in daily_summary
+        logger.warning(f"daily_summary rebuild failed (non-fatal): {e}")
+
+
+async def _gather_meal_items_bulk(meal_ids: list[str]) -> list[dict]:
+    """Single round-trip replacement for the previous N+1 loop."""
+    if not meal_ids:
+        return []
+    client = db.get_client()
+    out: list[dict] = []
+    # Supabase REST has practical IN-list limits; chunk just in case.
+    CHUNK = 100
+    for i in range(0, len(meal_ids), CHUNK):
+        batch = meal_ids[i:i+CHUNK]
+        try:
+            resp = (
+                client.table("meal_items")
+                .select("meal_id,ingredient_name,weight_grams,calories,protein_g,carbs_g,fat_g,fiber_g")
+                .in_("meal_id", batch)
+                .execute()
+            )
+            out.extend(resp.data or [])
+        except Exception as e:
+            logger.warning(f"meal_items bulk fetch failed for chunk: {e}")
+    return out
+
+
+async def _previous_coach_report(user_id: str, before_date: str) -> dict | None:
+    """Fetch the most recent coach_reports row strictly before `before_date`."""
+    client = db.get_client()
+    try:
+        resp = (
+            client.table("coach_reports")
+            .select("week_start,week_end,report_text")
+            .eq("user_id", user_id)
+            .lt("week_start", before_date)
+            .order("week_start", desc=True)
+            .limit(1)
+            .execute()
+        )
+        rows = resp.data or []
+        return rows[0] if rows else None
+    except Exception as e:
+        logger.warning(f"Could not fetch previous coach report: {e}")
+        return None
+
+
+async def _top_foods_last_4w(user_id: str, end_date: str) -> list[dict]:
+    """Top ingredients by frequency over the 28 days ending at end_date."""
+    client = db.get_client()
+    try:
+        end_dt = datetime.strptime(end_date, "%Y-%m-%d")
+        start_dt = end_dt - timedelta(days=28)
+        # Fetch meal IDs in window
+        meals_resp = (
+            client.table("meals")
+            .select("id")
+            .eq("user_id", user_id)
+            .eq("status", "confirmed")
+            .gte("eaten_at", f"{start_dt.strftime('%Y-%m-%d')}T00:00:00")
+            .lte("eaten_at", f"{end_date}T23:59:59")
+            .execute()
+        )
+        meal_ids = [r["id"] for r in (meals_resp.data or [])]
+        if not meal_ids:
+            return []
+        items = await _gather_meal_items_bulk(meal_ids)
+        agg: dict[str, dict] = {}
+        for it in items:
+            name = (it.get("ingredient_name") or "").strip().lower()
+            if not name:
+                continue
+            bucket = agg.setdefault(name, {"count": 0, "total_cal": 0})
+            bucket["count"] += 1
+            bucket["total_cal"] += it.get("calories") or 0
+        ranked = sorted(agg.items(), key=lambda kv: -kv[1]["count"])[:10]
+        return [
+            {
+                "ingredient": name,
+                "times_eaten": d["count"],
+                "total_kcal_28d": d["total_cal"],
+                "avg_daily_kcal_contribution": round(d["total_cal"] / 28),
+            }
+            for name, d in ranked
+        ]
+    except Exception as e:
+        logger.warning(f"top_foods_last_4w failed: {e}")
+        return []
+
+
 async def gather_weekly_data(user_id: str, sunday_str: str, saturday_str: str) -> dict:
-    """Collect meals, items, runs, weight, and water for a Sun-Sat week."""
+    """Collect meals, items, runs, weight, and water for a Sun-Sat week,
+    plus a previous-week summary block for trend comparison."""
+    # Defensive: rebuild summaries for both this week and the previous week
+    # so PREVIOUS_WEEK_SUMMARY is accurate too.
+    prev_sun, prev_sat = _previous_week_boundaries(sunday_str)
+    await _rebuild_daily_summaries_for_window(user_id, prev_sun, saturday_str)
+
     start_ts = f"{sunday_str}T00:00:00"
     end_ts = f"{saturday_str}T23:59:59"
     client = db.get_client()
@@ -75,15 +253,9 @@ async def gather_weekly_data(user_id: str, sunday_str: str, saturday_str: str) -
         .execute().data or []
     )
 
+    # Bulk fetch meal_items in a single round trip (replaces N+1)
     meal_ids = [m["id"] for m in meals]
-    meal_items = []
-    for mid in meal_ids:
-        items = (
-            client.table("meal_items").select("ingredient_name,weight_grams,calories,protein_g,carbs_g,fat_g,fiber_g")
-            .eq("meal_id", mid)
-            .execute().data or []
-        )
-        meal_items.extend([{**item, "meal_id": mid} for item in items])
+    meal_items = await _gather_meal_items_bulk(meal_ids)
 
     runs = (
         client.table("caltrack_runs").select("distance_km,duration_minutes,calories_burned,avg_pace_sec_per_km,run_date")
@@ -114,6 +286,22 @@ async def gather_weekly_data(user_id: str, sunday_str: str, saturday_str: str) -
         .execute().data or []
     )
 
+    # ── Previous-week comparison block ──
+    prev_summaries = (
+        client.table("daily_summary").select("date,total_calories_in,total_protein_g,total_carbs_g,total_fat_g,total_fiber_g,meal_count,weight_kg,calories_burned_exercise")
+        .eq("user_id", user_id)
+        .gte("date", prev_sun).lte("date", prev_sat)
+        .execute().data or []
+    )
+    prev_week_summary = _summarise_week(prev_sun, prev_sat, prev_summaries)
+    this_week_summary = _summarise_week(sunday_str, saturday_str, summaries)
+
+    # ── Previous coach report (for adherence grading) ──
+    prev_report = await _previous_coach_report(user_id, sunday_str)
+
+    # ── Top foods last 4 weeks ──
+    top_foods = await _top_foods_last_4w(user_id, saturday_str)
+
     return {
         "meals": meals,
         "meal_items": meal_items,
@@ -121,7 +309,60 @@ async def gather_weekly_data(user_id: str, sunday_str: str, saturday_str: str) -
         "weight_log": weights,
         "water_log": water,
         "daily_summaries": summaries,
+        "this_week_summary": this_week_summary,
+        "previous_week_summary": prev_week_summary,
+        "previous_coach_report": prev_report,
+        "top_foods_last_4w": top_foods,
         "week": f"{sunday_str} to {saturday_str}",
+    }
+
+
+def _summarise_week(start_date: str, end_date: str, summaries: list[dict]) -> dict:
+    """Aggregate stat-block for a week, derived from daily_summary rows."""
+    if not summaries:
+        return {
+            "week_start": start_date,
+            "week_end": end_date,
+            "days_with_data": 0,
+            "total_calories_in": 0,
+            "avg_daily_calories": 0,
+            "total_protein_g": 0,
+            "total_carbs_g": 0,
+            "total_fat_g": 0,
+            "total_fiber_g": 0,
+            "total_meals": 0,
+            "total_exercise_calories": 0,
+            "weight_start_kg": None,
+            "weight_end_kg": None,
+            "weight_delta_kg": None,
+        }
+    cal = sum(s.get("total_calories_in") or 0 for s in summaries)
+    pro = sum(float(s.get("total_protein_g") or 0) for s in summaries)
+    car = sum(float(s.get("total_carbs_g") or 0) for s in summaries)
+    fat = sum(float(s.get("total_fat_g") or 0) for s in summaries)
+    fib = sum(float(s.get("total_fiber_g") or 0) for s in summaries)
+    n = sum(s.get("meal_count") or 0 for s in summaries)
+    ex = sum(s.get("calories_burned_exercise") or 0 for s in summaries)
+    sorted_s = sorted(summaries, key=lambda s: s.get("date") or "")
+    w_start = next((s.get("weight_kg") for s in sorted_s if s.get("weight_kg")), None)
+    w_end = next((s.get("weight_kg") for s in reversed(sorted_s) if s.get("weight_kg")), None)
+    delta = round(w_end - w_start, 2) if (w_start and w_end) else None
+    days = len(summaries)
+    return {
+        "week_start": start_date,
+        "week_end": end_date,
+        "days_with_data": days,
+        "total_calories_in": cal,
+        "avg_daily_calories": round(cal / days) if days else 0,
+        "total_protein_g": round(pro, 1),
+        "total_carbs_g": round(car, 1),
+        "total_fat_g": round(fat, 1),
+        "total_fiber_g": round(fib, 1),
+        "total_meals": n,
+        "total_exercise_calories": ex,
+        "weight_start_kg": w_start,
+        "weight_end_kg": w_end,
+        "weight_delta_kg": delta,
     }
 
 
@@ -154,13 +395,33 @@ async def run_weekly_coach(user_id: str) -> str:
         "food_preferences": profile.get("food_preferences", {}),
     }
 
+    prev_report_block = "NONE — this is the first weekly report for this client."
+    if weekly_data.get("previous_coach_report"):
+        pr = weekly_data["previous_coach_report"]
+        prev_report_block = (
+            f"Previous report covered {pr.get('week_start')} to {pr.get('week_end')}:\n"
+            f"{pr.get('report_text', '')}"
+        )
+
     user_prompt = f"""
 WEEK: {weekly_data['week']}
 
 CLIENT PROFILE:
 {json.dumps(profile_summary, indent=2, default=str)}
 
-DAILY SUMMARIES:
+THIS_WEEK_SUMMARY (authoritative — derived from raw meals just now):
+{json.dumps(weekly_data['this_week_summary'], indent=2, default=str)}
+
+PREVIOUS_WEEK_SUMMARY (use for trend comparison):
+{json.dumps(weekly_data['previous_week_summary'], indent=2, default=str)}
+
+PREVIOUS_COACH_REPORT (use for adherence grading):
+{prev_report_block}
+
+TOP_FOODS_LAST_4W (use for pattern detection + recipe matching):
+{json.dumps(weekly_data['top_foods_last_4w'], indent=2, default=str)}
+
+DAILY SUMMARIES (this week, per day):
 {json.dumps(weekly_data['daily_summaries'], indent=2, default=str)}
 
 MEALS ({len(weekly_data['meals'])} total):
@@ -198,7 +459,7 @@ Analyze this week and produce your full report in Hebrew.
                         {"role": "user", "content": user_prompt},
                     ],
                     "temperature": 0.3,
-                    "max_tokens": 3000,
+                    "max_tokens": 3500,
                 },
             )
             response.raise_for_status()

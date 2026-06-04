@@ -74,8 +74,9 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
     for item in ai_items:
         ingredient_name = item.get("ingredient_name", "")
-        # AI no longer returns fdc_id — find best USDA match locally
-        fdc_id = nutrition.find_usda_match(ingredient_name)
+        # AI no longer returns fdc_id — find best USDA match locally,
+        # using a score threshold so weak matches do not override AI fallback.
+        fdc_id = nutrition.find_usda_match_strict(ingredient_name)
         ai_weight = item.get("estimated_weight_grams", 100)
         confidence = item.get("confidence", 0.5)
 
@@ -146,11 +147,32 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     await msg.reply_text(text, reply_markup=keyboard, parse_mode="Markdown")
 
 
+def _normalize_ingredient_key(name: str) -> str:
+    """Normalize an ingredient name for grouping few-shot corrections.
+
+    Strips qualifiers like 'grilled', 'cooked', 'raw' that differ between
+    AI calls for the same underlying food. Keeps the longest descriptive
+    noun token.
+    """
+    if not name:
+        return ""
+    qualifiers = {
+        "grilled", "cooked", "raw", "fresh", "fried", "baked", "roasted",
+        "steamed", "boiled", "smoked", "dried", "frozen", "canned",
+        "whole", "ground", "sliced", "chopped", "diced",
+    }
+    tokens = [t for t in name.lower().split() if t and t not in qualifiers]
+    return " ".join(tokens) or name.lower()
+
+
 async def _get_corrections_summary(limit: int = 10) -> list[dict]:
-    """Get most frequent AI corrections for few-shot prompt improvement."""
+    """Get most frequent AI corrections for few-shot prompt improvement.
+
+    Groups by a normalized ingredient name (qualifiers like 'grilled' removed)
+    so 'chicken breast' and 'grilled chicken breast' aggregate together.
+    """
     try:
         client = db.get_client()
-        # Manual aggregation since supabase-py doesn't support GROUP BY directly
         result = (
             client.table("ai_corrections")
             .select("ingredient_name,meal_type,ai_estimated_grams,user_corrected_grams")
@@ -158,18 +180,25 @@ async def _get_corrections_summary(limit: int = 10) -> list[dict]:
         )
         rows = result.data or []
 
-        # Aggregate in Python
+        # Aggregate by (normalized_name, meal_type)
         agg: dict[tuple, list] = {}
+        display_names: dict[tuple, str] = {}
         for r in rows:
-            key = (r["ingredient_name"], r["meal_type"])
+            raw_name = r["ingredient_name"]
+            norm = _normalize_ingredient_key(raw_name)
+            key = (norm, r["meal_type"])
             agg.setdefault(key, []).append(r)
+            # Keep the shortest seen display name as canonical
+            existing = display_names.get(key)
+            if existing is None or len(raw_name) < len(existing):
+                display_names[key] = raw_name
 
         corrections = []
-        for (name, meal_type), entries in agg.items():
+        for key, entries in agg.items():
             if len(entries) >= 3:
                 corrections.append({
-                    "ingredient_name": name,
-                    "meal_type": meal_type,
+                    "ingredient_name": display_names[key],
+                    "meal_type": key[1],
                     "avg_ai_estimate": round(sum(e["ai_estimated_grams"] for e in entries) / len(entries)),
                     "avg_user_correction": round(sum(e["user_corrected_grams"] for e in entries) / len(entries)),
                     "times_corrected": len(entries),

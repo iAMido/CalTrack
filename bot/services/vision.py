@@ -3,6 +3,10 @@ import json
 import base64
 import logging
 from bot.utils.config import config
+from bot.utils.portion_reference import (
+    portion_anchor_prompt_block,
+    vision_portion_block,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +23,7 @@ RULES:
 5. Provide the Hebrew name for each item.
 6. Return ONLY valid JSON array. No explanations, no markdown, no code blocks.
 
+""" + portion_anchor_prompt_block() + "\n" + vision_portion_block() + """
 OUTPUT FORMAT:
 [
   {
