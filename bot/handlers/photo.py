@@ -7,6 +7,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 from bot.utils.config import config
 from bot.utils.formatters import build_meal_keyboard, detect_meal_type
+from bot.utils.image import resize_for_upload
 from bot.services import vision, nutrition, personal_foods as pf
 from bot.db import supabase_client as db
 from bot.db import queries as db_queries
@@ -34,9 +35,15 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     msg = update.message
     await msg.reply_text("🔍 Analyzing your meal...")
 
-    # Download the photo (highest resolution)
+    # Download the photo (highest resolution Telegram exposes)
     photo_file = await msg.photo[-1].get_file()
-    photo_bytes = await photo_file.download_as_bytearray()
+    photo_bytes = bytes(await photo_file.download_as_bytearray())
+
+    # Re-encode to ~1280px JPEG q85 before doing anything with it.
+    # Same bytes feed both Supabase Storage and the vision AI — no need
+    # to send 3 MB phone shots to either; 1280px is more than enough for
+    # food identification, dashboards load faster, storage costs less.
+    photo_bytes = resize_for_upload(photo_bytes)
 
     # Upload to Supabase Storage
     meal_id = str(uuid.uuid4())
@@ -45,7 +52,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     storage_path = f"{date_str}/{meal_id}.jpg"
 
     try:
-        await db.upload_photo(bytes(photo_bytes), storage_path)
+        await db.upload_photo(photo_bytes, storage_path)
     except Exception as e:
         # Surface the failure — silent drops are the reason every prior meal
         # had photo_path = NULL. Full stack to logs, short message to user.
@@ -70,9 +77,9 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     # Get recent AI corrections as few-shot examples
     corrections = await _get_corrections_summary()
 
-    # Call Vision AI
+    # Call Vision AI — uses the same resized bytes as storage above
     try:
-        ai_items = await vision.analyze_meal_photo(bytes(photo_bytes), corrections=corrections)
+        ai_items = await vision.analyze_meal_photo(photo_bytes, corrections=corrections)
     except Exception as e:
         logger.error(f"Vision AI error: {e}")
         await msg.reply_text("❌ Could not analyze the photo. Please try again or use `/add` to log manually.", parse_mode="Markdown")

@@ -42,6 +42,9 @@ async def handle_barcode_photo(update: Update, context: ContextTypes.DEFAULT_TYP
 
     photo_file = await msg.photo[-1].get_file()
     photo_bytes = bytes(await photo_file.download_as_bytearray())
+    # Barcode decoding works fine at 1280px and is faster on smaller input.
+    from bot.utils.image import resize_for_upload
+    photo_bytes = resize_for_upload(photo_bytes)
 
     barcode = bc_service.decode_barcode(photo_bytes)
     if not barcode:
