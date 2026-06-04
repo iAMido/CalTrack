@@ -106,6 +106,16 @@ async def post_init(application: Application) -> None:
     logger.info("Loading USDA nutrition cache...")
     await load_usda_cache()
 
+    # Storage health check — fail loud, not silent. If the bucket is
+    # missing, every photo upload will silently fail (the symptom that
+    # left every meal with photo_path = NULL).
+    from bot.db.supabase_client import storage_health_check
+    ok, msg = await storage_health_check()
+    if ok:
+        logger.info(msg)
+    else:
+        logger.error(f"STORAGE WARNING: {msg}")
+
     tz = pytz.timezone(config.user_timezone)
     # Run every Sunday at 20:00 (days: 0=Sun in PTB's convention)
     application.job_queue.run_daily(

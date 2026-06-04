@@ -47,7 +47,21 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     try:
         await db.upload_photo(bytes(photo_bytes), storage_path)
     except Exception as e:
-        logger.warning(f"Photo upload failed (continuing without storage): {e}")
+        # Surface the failure — silent drops are the reason every prior meal
+        # had photo_path = NULL. Full stack to logs, short message to user.
+        logger.error(
+            f"Photo upload to bucket 'meals' failed: {type(e).__name__}: {e}",
+            exc_info=True,
+        )
+        try:
+            await msg.reply_text(
+                "⚠️ Photo upload to storage failed — meal will be logged "
+                "without a photo.\n"
+                f"`{type(e).__name__}: {str(e)[:200]}`",
+                parse_mode="Markdown",
+            )
+        except Exception:
+            pass
         storage_path = None
 
     # Detect meal type from time of day
