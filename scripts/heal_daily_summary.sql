@@ -39,13 +39,17 @@ SET total_calories_in = EXCLUDED.total_calories_in,
 
 COMMIT;
 
--- Verification — should return zero rows after a successful heal:
+-- Verification — should return zero rows after a successful heal.
+-- (Note: USING (user_id, date) does NOT work because the CTE column is
+-- aliased to `d`, not `date`. Use an explicit ON clause.)
 -- WITH actuals AS (
 --   SELECT DATE(eaten_at AT TIME ZONE 'Asia/Jerusalem') AS d, user_id,
 --          SUM(total_calories)::int AS cal, COUNT(*) AS n
 --   FROM meals WHERE status = 'confirmed' GROUP BY 1, 2
 -- )
--- SELECT ds.date, ds.total_calories_in, a.cal, ds.meal_count, a.n
--- FROM daily_summary ds JOIN actuals a USING (user_id, date)
+-- SELECT ds.date, ds.total_calories_in AS summary_cal, a.cal AS actual_cal,
+--        ds.meal_count AS summary_n, a.n AS actual_n
+-- FROM daily_summary ds
+-- JOIN actuals a ON a.user_id = ds.user_id AND a.d = ds.date
 -- WHERE ds.total_calories_in IS DISTINCT FROM a.cal
 --    OR ds.meal_count        IS DISTINCT FROM a.n;
