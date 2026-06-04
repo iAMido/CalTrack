@@ -3,6 +3,7 @@ import uuid
 from telegram import Update
 from telegram.ext import ContextTypes
 from bot.utils.config import config
+from bot.utils.image import resize_for_upload
 from bot.services import vision
 from bot.db import supabase_client as db
 
@@ -41,6 +42,8 @@ async def handle_label_photo(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     photo_file = await msg.photo[-1].get_file()
     photo_bytes = bytes(await photo_file.download_as_bytearray())
+    # Smaller image is also fine for label-extraction; saves tokens.
+    photo_bytes = resize_for_upload(photo_bytes)
 
     try:
         label = await vision.extract_nutrition_label(photo_bytes)
