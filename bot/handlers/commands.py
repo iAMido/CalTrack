@@ -12,6 +12,7 @@ from bot.services import nutrition as nut_service
 from bot.services.translator import translate
 from bot.utils.formatters import detect_meal_type
 from bot.services.calibration import check_and_recalibrate, format_calibration_message
+from bot.services import personal_foods as pf
 from bot.utils.portion_reference import portion_anchor_prompt_block
 from bot.db import supabase_client as db
 from bot.db import queries as db_queries
@@ -279,7 +280,19 @@ async def handle_add(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         grams = float(match.group(1))
         food_name = match.group(2).strip()
 
-        fdc_id = nut_service.find_usda_match_strict(food_name)
+        # #8 — Look up personal_foods first for stored fdc_id history.
+        # If the user has logged this food before we already know the best USDA
+        # mapping (or know that none works), so we can skip the search.
+        fdc_id = None
+        try:
+            personal = await pf.lookup_personal_food(food_name)
+        except Exception:
+            personal = None
+        if personal and personal.get("fdc_id"):
+            fdc_id = personal["fdc_id"]
+
+        if not fdc_id:
+            fdc_id = nut_service.find_usda_match_strict(food_name)
         ai_fallback = None
         if not fdc_id:
             ai_fallback = await nut_service.estimate_nutrition_text(food_name)
@@ -373,6 +386,23 @@ async def handle_add(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
                 "fat_g": item["fat_g"],
                 "fiber_g": item["fiber_g"],
             })
+
+        # #3 — Auto-save each item to personal_foods so /template + future
+        # /add precise-mode queries can reuse them.
+        try:
+            pf_items = [
+                {
+                    "ingredient_name": i["name"],
+                    "weight_grams": i["grams"],
+                    "fdc_id": i.get("fdc_id"),
+                    "weight_source": "user_confirmed" if match else "ai_estimate",
+                    "ai_estimated_grams": i["grams"],
+                }
+                for i in items
+            ]
+            await pf.auto_save_meal_items(pf_items, meal_id, meal_type)
+        except Exception as e:
+            logger.warning(f"auto_save_meal_items in /add non-fatal: {e}")
 
         daily = await db_queries.refresh_daily_summary(today, profile["id"])
         cal_in = daily.get("total_calories_in", 0)

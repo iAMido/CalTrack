@@ -14,19 +14,27 @@ async def get_user_profile() -> dict | None:
     return rows[0] if rows else None
 
 
-async def get_today_meals() -> list[dict]:
+async def get_today_meals(user_id: str | None = None) -> list[dict]:
     today = _today_str()
     client = db.get_client()
-    result = (
+    query = (
         client.table("meals")
         .select("*")
         .gte("eaten_at", f"{today}T00:00:00")
         .lte("eaten_at", f"{today}T23:59:59")
         .eq("status", "confirmed")
         .order("eaten_at", desc=False)
-        .execute()
     )
+    if user_id:
+        query = query.eq("user_id", user_id)
+    result = query.execute()
     return result.data or []
+
+
+async def get_today_meal_types(user_id: str) -> set[str]:
+    """Return the set of meal_types already logged today (for nudge logic)."""
+    meals = await get_today_meals(user_id)
+    return {m.get("meal_type") for m in meals if m.get("meal_type")}
 
 
 async def get_meal_items(meal_id: str) -> list[dict]:
@@ -42,13 +50,19 @@ async def get_or_create_daily_summary(date_str: str, user_id: str) -> dict:
 
 
 async def refresh_daily_summary(date_str: str, user_id: str) -> dict:
-    """Recalculate daily totals from meals and runs tables."""
+    """Recalculate daily totals from meals and runs tables for `user_id`.
+
+    Every sub-query is filtered by user_id — previously they were not, which
+    was harmless on the single-user instance but would leak between users
+    the moment a second profile existed.
+    """
     client = db.get_client()
 
     # Sum meals
     meals_result = (
         client.table("meals")
         .select("total_calories,total_protein_g,total_carbs_g,total_fat_g,total_fiber_g,meal_type")
+        .eq("user_id", user_id)
         .gte("eaten_at", f"{date_str}T00:00:00")
         .lte("eaten_at", f"{date_str}T23:59:59")
         .eq("status", "confirmed")
@@ -66,6 +80,7 @@ async def refresh_daily_summary(date_str: str, user_id: str) -> dict:
     runs_result = (
         client.table("caltrack_runs")
         .select("calories_burned")
+        .eq("user_id", user_id)
         .gte("run_date", f"{date_str}T00:00:00")
         .lte("run_date", f"{date_str}T23:59:59")
         .execute()
@@ -77,6 +92,7 @@ async def refresh_daily_summary(date_str: str, user_id: str) -> dict:
     weight_result = (
         client.table("weight_log")
         .select("weight_kg")
+        .eq("user_id", user_id)
         .gte("measured_at", f"{date_str}T00:00:00")
         .lte("measured_at", f"{date_str}T23:59:59")
         .order("measured_at", desc=True)
@@ -89,6 +105,7 @@ async def refresh_daily_summary(date_str: str, user_id: str) -> dict:
     water_result = (
         client.table("water_log")
         .select("amount_ml")
+        .eq("user_id", user_id)
         .gte("logged_at", f"{date_str}T00:00:00")
         .lte("logged_at", f"{date_str}T23:59:59")
         .execute()
@@ -121,16 +138,18 @@ async def refresh_daily_summary(date_str: str, user_id: str) -> dict:
     return await db.upsert("daily_summary", summary, on_conflict="user_id,date")
 
 
-async def get_last_n_meals(n: int = 5) -> list[dict]:
+async def get_last_n_meals(n: int = 5, user_id: str | None = None) -> list[dict]:
     client = db.get_client()
-    result = (
+    query = (
         client.table("meals")
         .select("*")
         .eq("status", "confirmed")
         .order("eaten_at", desc=True)
         .limit(n)
-        .execute()
     )
+    if user_id:
+        query = query.eq("user_id", user_id)
+    result = query.execute()
     return result.data or []
 
 
