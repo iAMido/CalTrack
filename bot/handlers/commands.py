@@ -12,6 +12,7 @@ from bot.services import nutrition as nut_service
 from bot.services.translator import translate
 from bot.utils.formatters import detect_meal_type
 from bot.services.calibration import check_and_recalibrate, format_calibration_message
+from bot.utils.portion_reference import portion_anchor_prompt_block
 from bot.db import supabase_client as db
 from bot.db import queries as db_queries
 
@@ -278,10 +279,10 @@ async def handle_add(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         grams = float(match.group(1))
         food_name = match.group(2).strip()
 
-        fdc_id = nut_service.find_usda_match(food_name)
+        fdc_id = nut_service.find_usda_match_strict(food_name)
         ai_fallback = None
         if not fdc_id:
-            ai_fallback = await _estimate_nutrition_text(food_name)
+            ai_fallback = await nut_service.estimate_nutrition_text(food_name)
 
         nut = nut_service.calculate_nutrition(fdc_id, int(grams), ai_fallback)
         items = [{"name": food_name, "grams": int(grams), "fdc_id": fdc_id, **nut}]
@@ -402,29 +403,23 @@ async def _analyze_dish(description: str) -> list[dict] | None:
     from bot.utils.config import config as _cfg
 
     logger.info(f"_analyze_dish called with: '{description}'")
+    system_content = (
+        "You are a clinical dietitian. The user describes food in Hebrew or English. "
+        "Break it into individual ingredients with estimated weights and ACCURATE nutrition per 100g. "
+        "Return ONLY a JSON array (no markdown, no explanation): "
+        '[{"name_en": "ingredient", "name_he": "מרכיב", "grams": 120, '
+        '"calories_per_100g": 165, "protein_per_100g": 31, "carbs_per_100g": 0, '
+        '"fat_per_100g": 3.6, "fiber_per_100g": 0}] '
+        "RULES:\n"
+        "- ONLY include ingredients the user explicitly mentions. Do NOT add oil, butter, "
+        "seasoning, or cooking fat unless the user says so.\n"
+        "- For composite dishes (שווארמה בפיתה, סביח), include all named components.\n"
+        "- If unsure, estimate conservatively but NEVER return 0 calories.\n\n"
+    ) + portion_anchor_prompt_block()
     payload = {
         "model": "openai/gpt-4o-mini",
         "messages": [
-            {"role": "system", "content": (
-                "You are a clinical dietitian. The user describes food in Hebrew or English. "
-                "Break it into individual ingredients with estimated weights and ACCURATE nutrition per 100g. "
-                "Return ONLY a JSON array (no markdown, no explanation): "
-                '[{"name_en": "ingredient", "name_he": "מרכיב", "grams": 120, '
-                '"calories_per_100g": 165, "protein_per_100g": 31, "carbs_per_100g": 0, '
-                '"fat_per_100g": 3.6, "fiber_per_100g": 0}] '
-                "RULES:\n"
-                "- ONLY include ingredients the user explicitly mentions. Do NOT add oil, butter, "
-                "seasoning, or cooking fat unless the user says so.\n"
-                "- For composite dishes (שווארמה בפיתה, סביח), include all named components.\n"
-                "- Use realistic Israeli portions: pita ~60g, tahini ~30g, hummus ~80g, schnitzel ~150g\n"
-                "- 1 egg = ~50g. An omelette from 2 eggs = 100g of egg, ~155 cal/100g = ~155 cal total.\n"
-                "- 1 tablespoon (tbsp/tbs) = ~15g for most foods, ~12g for cottage cheese\n"
-                "- calories_per_100g must NEVER be 0. Common values:\n"
-                "  egg=155, cottage cheese=98, Bulgarian/feta cheese=264, oats=389, "
-                "  rice=130, chicken breast=165, bread=265, olive oil=884, butter=717, "
-                "  hummus=166, tahini=595, avocado=160, burekas=360\n"
-                "- If unsure, estimate conservatively but NEVER return 0 calories"
-            )},
+            {"role": "system", "content": system_content},
             {"role": "user", "content": description},
         ],
         "temperature": 0.1,
@@ -453,39 +448,9 @@ async def _analyze_dish(description: str) -> list[dict] | None:
     return None
 
 
-async def _estimate_nutrition_text(food_name: str) -> dict | None:
-    """Ask OpenRouter for nutrition per 100g via text (no image)."""
-    try:
-        import httpx, json as _json
-        from bot.utils.config import config as _cfg
-        payload = {
-            "model": "openai/gpt-4o-mini",
-            "messages": [
-                {"role": "system", "content": (
-                    "Return ONLY a JSON object with nutrition per 100g for the food. "
-                    "Keys: calories_per_100g, protein_per_100g, carbs_per_100g, fat_per_100g, fiber_per_100g. "
-                    "No explanation, no markdown."
-                )},
-                {"role": "user", "content": food_name},
-            ],
-            "temperature": 0.1,
-            "max_tokens": 100,
-        }
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            r = await client.post(
-                f"{_cfg.openrouter_base_url}/chat/completions",
-                headers={"Authorization": f"Bearer {_cfg.openrouter_api_key}",
-                         "Content-Type": "application/json"},
-                json=payload,
-            )
-            r.raise_for_status()
-        content = r.json()["choices"][0]["message"]["content"].strip()
-        if content.startswith("```"):
-            content = content.split("```")[1].lstrip("json").strip()
-        return _json.loads(content)
-    except Exception as e:
-        logger.warning(f"Text nutrition estimate failed for '{food_name}': {e}")
-        return None
+# NOTE: _estimate_nutrition_text moved to bot/services/nutrition.py
+# as `estimate_nutrition_text` so it can be shared by the "➕ Missing item"
+# callback (bot/handlers/callbacks.py).
 
 
 async def handle_week(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

@@ -275,17 +275,21 @@ async def handle_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             context.user_data["awaiting_rename_item"] = idx
             return
 
-        # Re-lookup USDA and recalculate
-        fdc_id = nut_service.find_usda_match(new_name)
+        # Re-lookup USDA (strict threshold) and recalculate.
+        # If no strong USDA match, fetch fresh AI estimate so the renamed
+        # item never gets 0 calories.
+        fdc_id = nut_service.find_usda_match_strict(new_name)
         weight = pending["items"][idx]["weight_grams"]
         ai_fallback = pending["items"][idx].get("ai_fallback")
+        if not fdc_id and not ai_fallback:
+            ai_fallback = await nut_service.estimate_nutrition_text(new_name)
         nut = nut_service.calculate_nutrition(fdc_id, weight, ai_fallback)
 
         pending["items"][idx].update({
             "ingredient_name": new_name,
             "ingredient_name_he": new_name,
             "fdc_id": fdc_id,
-            "ai_fallback": None,
+            "ai_fallback": ai_fallback,
             **nut,
         })
 
@@ -350,21 +354,29 @@ async def handle_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             context.user_data["awaiting_add_item"] = True
             return
 
+        # Try strong USDA match first; fall back to a fresh AI estimate.
+        # This is what was missing — previously the item was saved with 0 kcal.
+        fdc_id = nut_service.find_usda_match_strict(name)
+        ai_fallback = None
+        if not fdc_id:
+            ai_fallback = await nut_service.estimate_nutrition_text(name)
+
         new_item = {
             "ingredient_name": name,
             "ingredient_name_he": name,
-            "fdc_id": None,
+            "fdc_id": fdc_id,
+            "ai_fallback": ai_fallback,
             "weight_grams": grams,
             "ai_estimated_grams": grams,
             "weight_source": "user_confirmed",
             "ai_confidence": 1.0,
             "auto_approved": False,
         }
-        new_item.update(nut_service.calculate_nutrition(None, grams))
+        new_item.update(nut_service.calculate_nutrition(fdc_id, grams, ai_fallback))
         pending["items"].append(new_item)
 
         nutrition_map = {
-            item["fdc_id"]: nut_service.calculate_nutrition(item["fdc_id"], item["weight_grams"])
+            item["fdc_id"]: nut_service.calculate_nutrition(item["fdc_id"], item["weight_grams"], item.get("ai_fallback"))
             for item in pending["items"] if item.get("fdc_id")
         }
         msg_text, keyboard = build_meal_keyboard(pending, nutrition_map)

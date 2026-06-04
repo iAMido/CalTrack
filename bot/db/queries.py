@@ -34,11 +34,11 @@ async def get_meal_items(meal_id: str) -> list[dict]:
 
 
 async def get_or_create_daily_summary(date_str: str, user_id: str) -> dict:
-    existing = await db.select_one("daily_summary", {"date": date_str})
+    existing = await db.select_one("daily_summary", {"date": date_str, "user_id": user_id})
     if existing:
         return existing
     row = {"date": date_str, "user_id": user_id}
-    return await db.upsert("daily_summary", row, on_conflict="date")
+    return await db.upsert("daily_summary", row, on_conflict="user_id,date")
 
 
 async def refresh_daily_summary(date_str: str, user_id: str) -> dict:
@@ -118,7 +118,7 @@ async def refresh_daily_summary(date_str: str, user_id: str) -> dict:
         "water_ml": water_ml,
     }
 
-    return await db.upsert("daily_summary", summary, on_conflict="date")
+    return await db.upsert("daily_summary", summary, on_conflict="user_id,date")
 
 
 async def get_last_n_meals(n: int = 5) -> list[dict]:
