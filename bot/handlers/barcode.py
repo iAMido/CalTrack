@@ -15,6 +15,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from bot.utils.config import config
 from bot.services import barcode as bc_service
+from bot.services import personal_foods as pf
 from bot.db import supabase_client as db
 from bot.db import queries as db_queries
 
@@ -176,6 +177,21 @@ async def handle_barcode_gram_callback(
         logger.error(f"Barcode meal save error: {e}")
         await query.edit_message_text("❌ Failed to save meal. Please try again.")
         return
+
+    # #3 — feed personal_foods so barcode-logged foods become reusable
+    try:
+        await pf.auto_save_meal_items(
+            [{
+                "ingredient_name": nutrition["name"],
+                "weight_grams": grams,
+                "weight_source": "barcode_lookup",
+                "ai_estimated_grams": grams,
+            }],
+            meal_id,
+            "snack",
+        )
+    except Exception as e:
+        logger.warning(f"auto_save_meal_items in /barcode non-fatal: {e}")
 
     # Refresh daily summary (non-fatal — meal is already saved)
     try:

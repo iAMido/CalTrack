@@ -403,6 +403,19 @@ async def run_weekly_coach(user_id: str) -> str:
             f"{pr.get('report_text', '')}"
         )
 
+    # #12 — Token budget guard.
+    # On heavy weeks (40+ meals × 4 items) the raw JSON dump approaches the
+    # model's input limit and inflates cost. Compress to one line per meal
+    # whenever item count exceeds the soft cap; keep raw items otherwise.
+    MEAL_ITEMS_SOFT_CAP = 150
+    if len(weekly_data["meal_items"]) > MEAL_ITEMS_SOFT_CAP:
+        meal_items_block = _compress_meal_items(weekly_data["meal_items"])
+    else:
+        meal_items_block = (
+            "MEAL ITEMS (individual foods):\n"
+            + json.dumps(weekly_data["meal_items"], indent=2, default=str)
+        )
+
     user_prompt = f"""
 WEEK: {weekly_data['week']}
 
@@ -427,8 +440,7 @@ DAILY SUMMARIES (this week, per day):
 MEALS ({len(weekly_data['meals'])} total):
 {json.dumps(weekly_data['meals'], indent=2, default=str)}
 
-MEAL ITEMS (individual foods):
-{json.dumps(weekly_data['meal_items'], indent=2, default=str)}
+{meal_items_block}
 
 EXERCISE ({len(weekly_data['runs'])} runs):
 {json.dumps(weekly_data['runs'], indent=2, default=str)}
@@ -483,6 +495,30 @@ Analyze this week and produce your full report in Hebrew.
         logger.warning(f"Could not save coach report to DB (non-fatal): {e}")
 
     return report_text
+
+
+def _compress_meal_items(items: list[dict]) -> str:
+    """One-line-per-meal compressed block for very heavy weeks.
+
+    Trades per-item visibility for token budget: groups by meal_id, joins
+    ingredient names + grams + calories into a single string per meal.
+    Activated only when item count exceeds the soft cap (~150 items).
+    """
+    by_meal: dict[str, list[dict]] = {}
+    for it in items:
+        by_meal.setdefault(it.get("meal_id") or "_", []).append(it)
+    lines = [
+        "MEAL ITEMS (compressed — heavy week, one line per meal):",
+    ]
+    for meal_id, its in by_meal.items():
+        parts = []
+        for it in its:
+            name = (it.get("ingredient_name") or "?")[:30]
+            grams = it.get("weight_grams") or 0
+            cal = it.get("calories") or 0
+            parts.append(f"{name} {grams}g/{cal}kcal")
+        lines.append(f"  {meal_id[:8]}: " + ", ".join(parts))
+    return "\n".join(lines)
 
 
 def split_for_telegram(text: str, max_len: int = 4000) -> list[str]:

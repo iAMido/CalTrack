@@ -1,4 +1,6 @@
 import logging
+import os
+import time
 import httpx
 import json as _json
 from bot.db import queries as db_queries
@@ -9,6 +11,15 @@ logger = logging.getLogger(__name__)
 
 # In-memory cache: {fdc_id: usda_row_dict}
 _usda_cache: dict[int, dict] = {}
+
+# Disk cache for the USDA load. The dataset doesn't change between deploys,
+# so we skip the 8 paginated Supabase round trips on cold start when the
+# file is fresh. Override with USDA_CACHE_DISABLED=1 to force a re-fetch.
+USDA_DISK_CACHE_PATH = os.environ.get(
+    "USDA_DISK_CACHE_PATH",
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "data", "usda_cache.json"),
+)
+USDA_DISK_CACHE_TTL_SECS = 60 * 60 * 24 * 7  # 7 days
 
 # Minimum USDA fuzzy-match score required before we trust the USDA row
 # over the AI-provided per-100g values. Below this we use the AI fallback.
@@ -21,14 +32,58 @@ _usda_cache: dict[int, dict] = {}
 USDA_MIN_SCORE = 200
 
 
+def _load_usda_from_disk() -> list[dict] | None:
+    """Return cached USDA rows from disk if fresh, else None."""
+    if os.environ.get("USDA_CACHE_DISABLED") == "1":
+        return None
+    try:
+        mtime = os.path.getmtime(USDA_DISK_CACHE_PATH)
+        if time.time() - mtime > USDA_DISK_CACHE_TTL_SECS:
+            return None
+        with open(USDA_DISK_CACHE_PATH, "r", encoding="utf-8") as f:
+            data = _json.load(f)
+        if isinstance(data, list) and len(data) > 100:
+            return data
+    except FileNotFoundError:
+        return None
+    except Exception as e:
+        logger.warning(f"USDA disk cache read failed: {e}")
+    return None
+
+
+def _save_usda_to_disk(rows: list[dict]) -> None:
+    """Persist USDA rows to disk for the next cold start."""
+    try:
+        os.makedirs(os.path.dirname(USDA_DISK_CACHE_PATH), exist_ok=True)
+        with open(USDA_DISK_CACHE_PATH, "w", encoding="utf-8") as f:
+            _json.dump(rows, f)
+        logger.info(f"USDA disk cache written ({len(rows)} rows)")
+    except Exception as e:
+        logger.warning(f"USDA disk cache write failed: {e}")
+
+
 async def load_usda_cache() -> None:
-    """Load all USDA Foundation Foods into memory. Call once on startup."""
+    """Load all USDA Foundation Foods into memory.
+    Prefers a fresh on-disk JSON snapshot to avoid the 8-page Supabase fetch
+    on every cold boot. Falls back to the DB if no fresh snapshot exists.
+    """
     global _usda_cache
+    cached = _load_usda_from_disk()
+    if cached:
+        for f in cached:
+            if f.get("fdc_id"):
+                _usda_cache[f["fdc_id"]] = f
+        logger.info(f"USDA cache loaded from disk: {len(_usda_cache)} foods")
+        return
+
     foods = await db_queries.get_all_usda_foods()
     for f in foods:
         if f.get("fdc_id"):
             _usda_cache[f["fdc_id"]] = f
-    logger.info(f"USDA cache loaded: {len(_usda_cache)} foods")
+    logger.info(f"USDA cache loaded from DB: {len(_usda_cache)} foods")
+
+    # Best-effort write so the next boot is fast
+    _save_usda_to_disk(foods)
 
 
 def get_usda_food_sync(fdc_id: int) -> dict | None:

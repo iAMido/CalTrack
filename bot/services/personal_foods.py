@@ -139,3 +139,60 @@ async def log_ai_correction(meal_item_id: str, ingredient_name: str, meal_type: 
         "ai_estimated_grams": ai_grams,
         "user_corrected_grams": user_grams,
     })
+
+
+async def lookup_personal_food(name: str) -> dict | None:
+    """Case-insensitive exact lookup by ingredient_name. Returns row or None."""
+    if not name:
+        return None
+    client = db.get_client()
+    try:
+        # Use ilike with exact pattern (no wildcards) for case-insensitive match
+        result = (
+            client.table("personal_foods")
+            .select("*")
+            .ilike("ingredient_name", name.strip())
+            .limit(1)
+            .execute()
+        )
+        rows = result.data or []
+        return rows[0] if rows else None
+    except Exception as e:
+        logger.warning(f"lookup_personal_food failed for '{name}': {e}")
+        return None
+
+
+async def auto_save_meal_items(
+    items: list[dict],
+    meal_id: str,
+    meal_type: str,
+) -> None:
+    """Upsert personal_foods + log personal_food_logs for each item.
+
+    Used by /add, /template, /barcode confirm paths so personal food history
+    accumulates even when the user does not go through the photo flow. The
+    photo flow handles this itself via personal_food_id wiring.
+
+    Best-effort — per-item failures are logged but don't abort the batch.
+    """
+    for item in items:
+        name = item.get("ingredient_name") or item.get("name")
+        weight = item.get("weight_grams") or item.get("grams")
+        if not name or not weight:
+            continue
+        try:
+            pf = await get_or_create_personal_food(name, item.get("fdc_id"))
+            pf_id = pf.get("id")
+            if not pf_id:
+                continue
+            await log_food_entry(
+                personal_food_id=pf_id,
+                meal_id=meal_id,
+                meal_type=meal_type,
+                weight_grams=int(weight),
+                weight_source=item.get("weight_source") or "user_confirmed",
+                ai_estimated_grams=item.get("ai_estimated_grams") or int(weight),
+                was_corrected=False,
+            )
+        except Exception as e:
+            logger.warning(f"auto_save_meal_items: skipping {name}: {e}")

@@ -6,6 +6,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from bot.utils.config import config
 from bot.utils.formatters import detect_meal_type
+from bot.services import personal_foods as pf
 from bot.db import supabase_client as db
 from bot.db import queries as db_queries
 
@@ -161,6 +162,12 @@ async def _log_template(update: Update, template: dict, profile: dict, edit_mess
                 "fat_g": item.get("fat_g"),
                 "fiber_g": item.get("fiber_g"),
             })
+
+        # #3 — feed personal_foods from templates too
+        try:
+            await pf.auto_save_meal_items(items, meal_id, meal_type)
+        except Exception as e:
+            logger.warning(f"auto_save_meal_items in /template non-fatal: {e}")
 
         today = datetime.now(tz).strftime("%Y-%m-%d")
         daily = await db_queries.refresh_daily_summary(today, profile["id"])

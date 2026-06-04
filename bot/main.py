@@ -14,6 +14,7 @@ from bot.services.nutrition import load_usda_cache
 from bot.services.calibration import recalibrate, format_calibration_message
 from bot.services.strava import sync_strava_runs, format_run_message
 from bot.services.coach import run_weekly_coach, split_for_telegram
+from bot.services.nudge import nudge_breakfast, nudge_lunch, nudge_dinner
 from bot.handlers.photo import handle_photo
 from bot.handlers.commands import (
     handle_weight,
@@ -128,6 +129,24 @@ async def post_init(application: Application) -> None:
         days=(6,),
         name="weekly_coach",
     )
+
+    # "Forgot to log?" nudges — fire only if the matching meal isn't logged yet.
+    application.job_queue.run_daily(
+        nudge_breakfast,
+        time=dt_time(11, 0, tzinfo=tz),
+        name="nudge_breakfast",
+    )
+    application.job_queue.run_daily(
+        nudge_lunch,
+        time=dt_time(14, 0, tzinfo=tz),
+        name="nudge_lunch",
+    )
+    application.job_queue.run_daily(
+        nudge_dinner,
+        time=dt_time(19, 30, tzinfo=tz),
+        name="nudge_dinner",
+    )
+
     logger.info("CalTrack bot ready.")
 
 

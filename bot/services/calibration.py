@@ -24,48 +24,50 @@ def calculate_target(tdee: int, weekly_deficit_kg: float, min_calories: int) -> 
     return max(target, min_calories)
 
 
-async def get_7day_weight_avg() -> float | None:
+async def get_7day_weight_avg(user_id: str | None = None) -> float | None:
     """Average weight from the last 7 days of weight_log. Returns None if no data."""
     tz = pytz.timezone(config.user_timezone)
     since = (datetime.now(tz) - timedelta(days=7)).isoformat()
     client = db.get_client()
-    result = (
-        client.table("weight_log")
-        .select("weight_kg")
-        .gte("measured_at", since)
-        .execute()
-    )
+    query = client.table("weight_log").select("weight_kg").gte("measured_at", since)
+    if user_id:
+        query = query.eq("user_id", user_id)
+    result = query.execute()
     weights = [r["weight_kg"] for r in (result.data or [])]
     return round(sum(weights) / len(weights), 2) if weights else None
 
 
-async def get_weight_trend_7d() -> float | None:
+async def get_weight_trend_7d(user_id: str | None = None) -> float | None:
     """Weight change over last 7 days (negative = lost). None if < 2 data points."""
     tz = pytz.timezone(config.user_timezone)
     since = (datetime.now(tz) - timedelta(days=7)).isoformat()
     client = db.get_client()
-    result = (
+    query = (
         client.table("weight_log")
         .select("weight_kg,measured_at")
         .gte("measured_at", since)
         .order("measured_at", desc=False)
-        .execute()
     )
+    if user_id:
+        query = query.eq("user_id", user_id)
+    result = query.execute()
     rows = result.data or []
     if len(rows) < 2:
         return None
     return round(rows[-1]["weight_kg"] - rows[0]["weight_kg"], 2)
 
 
-async def get_last_calibration() -> dict | None:
+async def get_last_calibration(user_id: str | None = None) -> dict | None:
     client = db.get_client()
-    result = (
+    query = (
         client.table("calibration_log")
         .select("*")
         .order("calibrated_at", desc=True)
         .limit(1)
-        .execute()
     )
+    if user_id:
+        query = query.eq("user_id", user_id)
+    result = query.execute()
     return result.data[0] if result.data else None
 
 
@@ -78,9 +80,9 @@ async def recalibrate(trigger: str = "manual") -> dict:
     min_cal = config.min_calories_male if profile["sex"] == "male" else config.min_calories_female
 
     # Use 7-day average weight when available — more stable than a single reading
-    avg_weight = await get_7day_weight_avg()
+    avg_weight = await get_7day_weight_avg(profile["id"])
     weight_for_calc = avg_weight if avg_weight else profile["current_weight_kg"]
-    trend = await get_weight_trend_7d()
+    trend = await get_weight_trend_7d(profile["id"])
 
     new_bmr = calculate_bmr(
         weight_for_calc,
@@ -143,7 +145,7 @@ async def check_and_recalibrate() -> dict | None:
     if not profile:
         return None
 
-    last_cal = await get_last_calibration()
+    last_cal = await get_last_calibration(profile["id"])
 
     # Milestone check
     if last_cal:
