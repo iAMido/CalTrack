@@ -113,6 +113,12 @@ async def _get_token() -> str:
     return _access_token
 
 
+class StravaAppInactiveError(Exception):
+    """Strava has deactivated the API application itself. No token refresh
+    can fix this — the developer must reactivate at strava.com/settings/api
+    (usually by re-accepting the updated API agreement)."""
+
+
 async def fetch_recent_activities(after_timestamp: int) -> list[dict]:
     token = await _get_token()
     async with httpx.AsyncClient(timeout=30.0) as client:
@@ -127,6 +133,15 @@ async def fetch_recent_activities(after_timestamp: int) -> list[dict]:
                 f"{STRAVA_API_BASE}/athlete/activities",
                 headers={"Authorization": f"Bearer {token}"},
                 params={"after": after_timestamp, "per_page": 30},
+            )
+        # 403 with Application/Status/Inactive = the Strava app was
+        # deactivated (e.g. pending re-acceptance of API terms). Surface a
+        # human-actionable message instead of a bare httpx 403.
+        if resp.status_code == 403 and '"Inactive"' in resp.text:
+            raise StravaAppInactiveError(
+                "Strava deactivated the API application. "
+                "Reactivate it at https://www.strava.com/settings/api "
+                "(usually: re-accept the API agreement), then sync again."
             )
         resp.raise_for_status()
 
