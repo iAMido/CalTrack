@@ -54,7 +54,7 @@ def extract_nutrition(product: dict) -> dict | None:
 
     return {
         "name": name.strip(),
-        "barcode": product.get("code", barcode if "barcode" in dir() else ""),
+        "barcode": product.get("code", ""),
         "calories_per_100g": round(kcal),
         "protein_per_100g": round(n.get("proteins_100g", 0) * 10) / 10,
         "carbs_per_100g": round(n.get("carbohydrates_100g", 0) * 10) / 10,

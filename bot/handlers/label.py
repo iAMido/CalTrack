@@ -1,3 +1,4 @@
+import hashlib
 import logging
 import uuid
 from telegram import Update
@@ -64,8 +65,13 @@ async def handle_label_photo(update: Update, context: ContextTypes.DEFAULT_TYPE)
     fiber = label.get("fiber_per_100g", 0)
     sodium = label.get("sodium_mg_per_100g", 0)
 
-    # Save to usda_foundation with a synthetic fdc_id so it's matchable
-    synthetic_fdc_id = CUSTOM_FDC_BASE + abs(hash(food_name.lower())) % 900_000
+    # Save to usda_foundation with a synthetic fdc_id so it's matchable.
+    # Must be DETERMINISTIC across process restarts: Python's built-in
+    # hash() is salted per process (PYTHONHASHSEED), so the same label
+    # scanned after a redeploy would get a new fdc_id and create a
+    # duplicate row. md5 gives the same id for the same name, forever.
+    name_digest = int(hashlib.md5(food_name.lower().encode("utf-8")).hexdigest()[:8], 16)
+    synthetic_fdc_id = CUSTOM_FDC_BASE + name_digest % 900_000
 
     await db.upsert("usda_foundation", {
         "fdc_id": synthetic_fdc_id,
