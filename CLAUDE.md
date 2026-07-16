@@ -76,6 +76,7 @@ The CalTrack web dashboard is at `C:\Users\ido\running-coach\app\caltrack\`. It 
 - `overview/route.ts` — GET daily summary + stats
 
 ## Key Design Decisions
+- **Energy model: sedentary base + explicit exercise credit** — `activity_factor` is capped at 1.2 (sedentary) because every workout is logged and credited to the daily budget explicitly (`remaining = target + exercise − eaten`). Using 1.55 would count the same run twice. TDEE is a blend of the Mifflin formula and an *empirical* TDEE back-solved from the user's own intake + weight trend (`calibration.py::get_empirical_tdee`, needs 14+ fully-logged days).
 - **Freeform `/add` uses AI nutrition directly** — not USDA fuzzy matching. USDA matching caused accuracy issues (e.g., "egg" matched "Egg, whole, dried" at 575 cal/100g). AI values from gpt-4o-mini are more accurate for freeform text input.
 - **Original Hebrew description saved in `meals.notes`** — displayed as meal title in dashboard instead of ingredient names. E.g., "3 מיני בורקסים" shows as the title.
 - **`weight_source` constraint** — `meal_items.weight_source` must be one of: `ai_estimate`, `user_confirmed`, `user_corrected`, `personal_db_auto`, `barcode_lookup`. Dashboard uses `ai_estimate` for new meals, `user_corrected` for edits.

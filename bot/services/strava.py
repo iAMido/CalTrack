@@ -39,12 +39,15 @@ async def _save_token(access_token: str, refresh_token: str, expires_at: int, us
     """Save/update token in DB so the rotated refresh_token is preserved."""
     try:
         client = db.get_client()
+        # Store timezone-AWARE ISO strings (with +00:00). Naive strings
+        # round-trip unpredictably depending on the column type and then
+        # blow up the aware-vs-naive comparison in _get_token().
         token_data = {
             "user_id": user_id,
             "access_token": access_token,
             "refresh_token": refresh_token,
-            "expires_at": datetime.utcfromtimestamp(expires_at).isoformat(),
-            "updated_at": datetime.utcnow().isoformat(),
+            "expires_at": datetime.fromtimestamp(expires_at, tz=pytz.UTC).isoformat(),
+            "updated_at": datetime.now(pytz.UTC).isoformat(),
         }
         # Try upsert — if table doesn't exist yet, just log warning
         existing = await _get_stored_token()
@@ -103,10 +106,16 @@ async def _get_token() -> str:
     # Check if stored token is still valid
     stored = await _get_stored_token()
     if stored and stored.get("access_token") and stored.get("expires_at"):
-        expires = datetime.fromisoformat(stored["expires_at"].replace("Z", "+00:00"))
-        if expires > datetime.now(expires.tzinfo or pytz.UTC):
-            _access_token = stored["access_token"]
-            return _access_token
+        try:
+            expires = datetime.fromisoformat(stored["expires_at"].replace("Z", "+00:00"))
+            # Legacy rows stored naive timestamps — they were written as UTC
+            if expires.tzinfo is None:
+                expires = pytz.UTC.localize(expires)
+            if expires > datetime.now(pytz.UTC):
+                _access_token = stored["access_token"]
+                return _access_token
+        except (ValueError, TypeError) as e:
+            logger.warning(f"Bad stored expires_at, forcing refresh: {e}")
 
     # Need to refresh
     _access_token = await refresh_access_token()
@@ -154,6 +163,9 @@ def parse_strava_activity(activity: dict, user_weight_kg: float) -> dict:
     avg_speed_ms = activity.get("average_speed", 0)
     pace_sec_per_km = round(1000 / avg_speed_ms) if avg_speed_ms > 0 else None
     avg_hr = activity.get("average_heartrate")
+    # NOTE: the /athlete/activities LIST endpoint never includes
+    # "calories" (only the per-activity detail endpoint does), so in
+    # practice the MET fallback below is what runs for every import.
     strava_calories = activity.get("calories")
 
     calories = strava_calories or calculate_calories_burned(

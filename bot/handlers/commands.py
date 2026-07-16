@@ -7,7 +7,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from bot.utils.config import config
 from bot.services.daily_summary import get_today_summary_text, get_status_text
-from bot.utils.met_calculator import calculate_calories_burned, pace_to_sec_per_km, format_pace
+from bot.utils.met_calculator import calculate_calories_burned, format_pace
 from bot.services import nutrition as nut_service
 from bot.services.translator import translate
 from bot.utils.formatters import detect_meal_type
@@ -99,17 +99,26 @@ async def handle_run(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     try:
         distance_km = float(args[0])
         duration_str = args[1]
-        pace_sec = pace_to_sec_per_km(duration_str) if ":" in duration_str else None
 
-        # If duration is total time (MM:SS format), calculate pace
+        # Total time: MM:SS for runs under an hour, H:MM:SS above.
+        # (Previously H:MM:SS parsed as minutes:seconds — a 1:45:00 run
+        # was logged as 1.75 minutes.)
         parts = duration_str.split(":")
-        duration_min = int(parts[0]) + int(parts[1]) / 60
+        if len(parts) == 3:
+            duration_min = int(parts[0]) * 60 + int(parts[1]) + int(parts[2]) / 60
+        elif len(parts) == 2:
+            duration_min = int(parts[0]) + int(parts[1]) / 60
+        else:
+            raise ValueError(f"duration must be MM:SS or H:MM:SS, got '{duration_str}'")
 
         avg_hr = int(args[2]) if len(args) >= 3 else None
         pace_sec = round((duration_min * 60) / distance_km) if distance_km > 0 else None
 
     except (ValueError, IndexError) as e:
-        await update.message.reply_text(f"❌ Invalid format: {e}\nExample: `/run 5.2 28:30 152`", parse_mode="Markdown")
+        await update.message.reply_text(
+            f"❌ Invalid format: {e}\nExamples: `/run 5.2 28:30 152` or `/run 15 1:45:00`",
+            parse_mode="Markdown",
+        )
         return
 
     profile = await db_queries.get_user_profile()

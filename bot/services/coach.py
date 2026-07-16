@@ -391,7 +391,7 @@ async def run_weekly_coach(user_id: str) -> str:
         "target_daily_calories": profile.get("target_daily_calories"),
         "bmr": profile.get("bmr"),
         "tdee": profile.get("tdee"),
-        "activity_factor": float(profile.get("activity_factor", 1.55)),
+        "activity_factor": float(profile.get("activity_factor", 1.2)),
         "food_preferences": profile.get("food_preferences", {}),
     }
 
