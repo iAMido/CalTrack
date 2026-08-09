@@ -26,7 +26,24 @@
       "Bash(Stop-Process -Force)",
       "Bash(python -)",
       "mcp__Claude_in_Chrome__tabs_context_mcp",
-      "Bash(git commit *)"
+      "Bash(git commit *)",
+      "Bash(git -C \"C:/Users/ido/Caltrack\" fetch origin)",
+      "Bash(git -C \"C:/Users/ido/Caltrack\" status --short --branch)",
+      "Bash(cd \"C:/Users/ido/Caltrack\" && echo \"=== Dockerfile ===\" && cat Dockerfile && echo \"\" && echo \"=== .dockerignore ===\" && cat .dockerignore && echo \"\" && echo \"=== railway.toml ===\" && cat railway.toml && echo \"\" && echo \"=== requirements.txt ===\" && cat requirements.txt)",
+      "Bash(ssh -o ConnectTimeout=15 -o BatchMode=yes tars-vps \"echo CONNECTED; hostname; uptime\")",
+      "Bash(ssh tars-vps *)",
+      "mcp__railway__whoami",
+      "mcp__railway__list_projects",
+      "mcp__railway__list_services",
+      "mcp__railway__list_variables",
+      "mcp__railway__list_deployments",
+      "mcp__railway__service_metrics",
+      "mcp__railway__environment_status",
+      "mcp__railway__get_service_config",
+      "mcp__railway__get_logs",
+      "mcp__f9ae2d57-63c3-4f57-bf5d-19063bf5dc7e__list_projects",
+      "mcp__f9ae2d57-63c3-4f57-bf5d-19063bf5dc7e__execute_sql",
+      "Bash(cd \"C:/Users/ido/tars\" && cat scripts/tars-backup.sh)"
     ]
   }
 }

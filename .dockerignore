@@ -16,3 +16,9 @@ bot_debug.log
 node_modules/
 .supabase/
 .railway/
+
+# Deployment tooling — used on the host, not inside the image. Excluding these
+# also keeps edits to them from busting the `COPY . .` layer cache.
+Dockerfile
+docker-compose.yml
+deploy.sh
