@@ -527,7 +527,6 @@ async def handle_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         "*— System —*\n"
         "🔧 `/calibrate` — Recalculate BMR/TDEE targets\n"
         "📈 `/stats` — Current BMR/TDEE/target\n"
-        "🏅 `/syncstrava` — Import latest Strava runs now\n"
         "📈 `/week` or `/w` — Weekly AI Coach report\n"
         "❓ `/help` — This message"
     )

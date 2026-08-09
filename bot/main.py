@@ -12,7 +12,6 @@ from telegram.ext import (
 from bot.utils.config import config
 from bot.services.nutrition import load_usda_cache
 from bot.services.calibration import recalibrate, format_calibration_message
-from bot.services.strava import sync_strava_runs, format_run_message
 from bot.services.coach import run_weekly_coach, split_for_telegram
 from bot.services.nudge import nudge_breakfast, nudge_lunch, nudge_dinner
 from bot.handlers.photo import handle_photo
@@ -32,7 +31,7 @@ from bot.handlers.label import handle_label
 from bot.handlers.barcode import handle_barcode_command
 from bot.handlers.template import handle_template
 from bot.handlers.callbacks import handle_callback, handle_text_input
-from bot.handlers.admin import handle_calibrate, handle_stats, handle_syncstrava
+from bot.handlers.admin import handle_calibrate, handle_stats
 
 logging.basicConfig(
     format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
@@ -54,30 +53,6 @@ async def weekly_calibration_job(context) -> None:
         logger.info("Weekly calibration completed.")
     except Exception as e:
         logger.error(f"Weekly calibration job failed: {e}")
-
-
-async def strava_sync_job(context) -> None:
-    """Runs daily at 22:00 — imports new Strava runs and notifies."""
-    try:
-        imported = await sync_strava_runs()
-        for run in imported:
-            await context.bot.send_message(
-                chat_id=config.telegram_allowed_chat_id,
-                text=format_run_message(run),
-                parse_mode="Markdown",
-            )
-        if not imported:
-            logger.info("Strava sync: no new runs.")
-    except Exception as e:
-        logger.error(f"Strava sync job failed: {e}", exc_info=True)
-        try:
-            await context.bot.send_message(
-                chat_id=config.telegram_allowed_chat_id,
-                text=f"❌ Strava auto-sync failed:\n`{e}`",
-                parse_mode="Markdown",
-            )
-        except Exception:
-            pass
 
 
 async def weekly_coach_job(context) -> None:
@@ -123,13 +98,6 @@ async def post_init(application: Application) -> None:
         time=dt_time(20, 0, tzinfo=tz),
         days=(0,),
         name="weekly_calibration",
-    )
-
-    # Strava sync: daily at 22:00
-    application.job_queue.run_daily(
-        strava_sync_job,
-        time=dt_time(22, 0, tzinfo=tz),
-        name="strava_sync",
     )
 
     # AI Coach: Saturday at 22:00 (days: 6=Sat in PTB's convention)
@@ -186,7 +154,6 @@ def main() -> None:
     app.add_handler(CommandHandler("add", handle_add, filters=auth))
     app.add_handler(CommandHandler("calibrate", handle_calibrate, filters=auth))
     app.add_handler(CommandHandler("stats", handle_stats, filters=auth))
-    app.add_handler(CommandHandler("syncstrava", handle_syncstrava, filters=auth))
     app.add_handler(CommandHandler("help", handle_help, filters=auth))
     app.add_handler(CommandHandler("barcode", handle_barcode_command, filters=auth))
     app.add_handler(CommandHandler("template", handle_template, filters=auth))

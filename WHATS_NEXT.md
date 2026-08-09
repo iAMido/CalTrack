@@ -1,5 +1,12 @@
 # CalTrack — What's Next
 
+## Recently Completed (2026-08-08)
+
+### Exercise calories now read from RunCoach
+- **`caltrack_runs` is a view** over `runcoach.runs` (cutover 2026-06-29) — recovered 18 runs / 9,450 kcal that had silently counted as zero since the Strava outage
+- **Strava sync removed** — RunCoach moved to intervals.icu, so its rows arrive as `source='intervals_sync'`; the old `source='strava'` dedupe would not have caught them and a re-enabled sync would have double-counted. `strava.py`, the 22:00 job, `/syncstrava` and `strava_tokens` are gone
+- **`/run` still works** — routed to the backing table by `INSTEAD OF` triggers
+
 ## Recently Completed (2026-05-16)
 
 ### Stage 3 — AI Coach + Strava + Calibration

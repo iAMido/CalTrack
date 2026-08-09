@@ -12,7 +12,7 @@ A single-user, privacy-first calorie tracking system. Photograph meals via Teleg
 - **Dashboard**: Next.js web app (lives in `running-coach` repo at `/caltrack`) — meals CRUD, weight, overview, coach reports
 - **Nutrition Data**: USDA SR Legacy + Foundation Foods (8,156 foods in `usda_foundation` table)
 - **Nutrition (freeform)**: AI-provided values (OpenRouter gpt-4o-mini) — used directly, not USDA matched
-- **Exercise**: Manual `/run` command + Strava sync (daily 22:00 cron + `/syncstrava`)
+- **Exercise**: Manual `/run` command; all other runs come from RunCoach via the `caltrack_runs` view (no sync in CalTrack)
 - **AI Coach**: Weekly Hebrew report (Saturday 22:00) — saved to DB + displayed in dashboard
 - **Language**: Hebrew input supported everywhere via translation layer (gpt-4o-mini)
 
@@ -54,7 +54,7 @@ caltrack/
 | 1 — MVP | Photo logging, inline confirmation, daily summary, /run /weight /water /undo | ✅ Complete |
 | 2 — Learning | /label, /add (freeform AI), per-item rename, Hebrew input, meal editing, personal food history | ✅ Complete |
 | 2.5 — Dashboard | Next.js dashboard (in running-coach): meals CRUD, AI analysis, weight tracking, overview | ✅ Complete |
-| 3 — AI Coach | Weekly Hebrew report, BMR calibration, Strava sync, coach reports saved to DB | ✅ Complete |
+| 3 — AI Coach | Weekly Hebrew report, BMR calibration, coach reports saved to DB | ✅ Complete |
 | 3.5 — Templates & Barcode | /template command, /barcode command, meal photos in dashboard, personal foods in Add Meal | ✅ Complete |
 | 4 — Extras | Garmin sync, reminders, photo improvements | 📋 Future |
 
@@ -79,7 +79,8 @@ The CalTrack web dashboard is at `C:\Users\ido\running-coach\app\caltrack\`. It 
 - **Freeform `/add` uses AI nutrition directly** — not USDA fuzzy matching. USDA matching caused accuracy issues (e.g., "egg" matched "Egg, whole, dried" at 575 cal/100g). AI values from gpt-4o-mini are more accurate for freeform text input.
 - **Original Hebrew description saved in `meals.notes`** — displayed as meal title in dashboard instead of ingredient names. E.g., "3 מיני בורקסים" shows as the title.
 - **`weight_source` constraint** — `meal_items.weight_source` must be one of: `ai_estimate`, `user_confirmed`, `user_corrected`, `personal_db_auto`, `barcode_lookup`. Dashboard uses `ai_estimate` for new meals, `user_corrected` for edits.
-- **`caltrack_runs` is a VIEW, not a table** (since 2026-08-08, `scripts/schema_stage4_runcoach_runs_view.sql`). CalTrack's Strava sync died on 2026-06-29 and five weeks of exercise calories silently read as zero. RunCoach syncs into the same Supabase project, so the view reads `runcoach.runs` directly — no sync, no API call, no CalTrack code change. Writes (`/run`, Strava sync) still work: `INSTEAD OF` triggers route them to the retained physical table `_bak_caltrack_runs`. Rows sourced from RunCoach reject UPDATE/DELETE with a clear error.
+- **`caltrack_runs` is a VIEW, not a table** (since 2026-08-08, `scripts/schema_stage4_runcoach_runs_view.sql`). CalTrack's Strava sync died on 2026-06-29 and five weeks of exercise calories silently read as zero. RunCoach syncs into the same Supabase project, so the view reads `runcoach.runs` directly — no sync, no API call, no CalTrack code change. Writes from `/run` still work: `INSTEAD OF` triggers route them to the retained physical table `_bak_caltrack_runs`. Rows sourced from RunCoach reject UPDATE/DELETE with a clear error.
+- **CalTrack has no Strava integration** (removed 2026-08-08). RunCoach moved off Strava to intervals.icu, so its rows reach the view as `source='intervals_sync'`. The old `_run_exists()` dedupe matched on `source='strava'` and would not have caught them — a re-enabled sync would have re-imported runs that were already visible, double-counting them. `bot/services/strava.py`, the 22:00 job, `/syncstrava` and the `strava_tokens` table are all gone. `/run` is the only remaining writer. Do not re-add a sync: the view already provides the data.
 - **Exercise-calorie changeover date: 2026-06-29.** The view serves history (`<= 2026-06-29`) from the preserved CalTrack rows and only reads RunCoach from `2026-06-30` on. The two systems disagree on **every** shared run — mean 30.4 kcal, range −137..+108, net just −81 kcal — because `strava.py` stored `strava_calories or MET_fallback` while RunCoach stored its own figure. Serving history from RunCoach would retroactively restate an already-reconciled deficit/weight series. Do not "simplify" the view by dropping the cutover.
 
 ## First-Time Setup

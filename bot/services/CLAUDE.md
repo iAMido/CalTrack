@@ -12,7 +12,6 @@ Pure Python business logic, independent of Telegram. Each service is a module of
 | `personal_foods.py` | Per-food history, auto-approve logic, correction logging | ✅ |
 | `calibration.py` | BMR/TDEE recalculation (Mifflin-St Jeor), calibration_log | ✅ |
 | `daily_summary.py` | Aggregate today's meals + runs + water + weight | ✅ |
-| `strava.py` | OAuth2 refresh, fetch activities, MET calorie fallback | 📋 Stage 3 |
 | `coach.py` | Weekly AI Coach: 7-day data → OpenRouter → Hebrew report | 📋 Stage 3 |
 
 ## vision.py — Two Prompts

@@ -138,7 +138,7 @@ caltrack/
 |-------|----------|--------|
 | 1 — MVP | Photo logging, inline confirmation, daily summary, /run /weight /water /undo | ✅ Complete |
 | 2 — Learning | /label, /add, Hebrew input, personal food history, auto-approve | ✅ Complete |
-| 3 — AI Coach | Weekly Hebrew report, Streamlit dashboard, BMR calibration, Strava sync | 📋 Planned |
+| 3 — AI Coach | Weekly Hebrew report, Streamlit dashboard, BMR calibration | 📋 Planned |
 | 4 — Extras | Barcode scan, Garmin, reminders, Next.js dashboard | 📋 Future |
 
 See [caltrack-architecture.md](caltrack-architecture.md) for the full technical blueprint.

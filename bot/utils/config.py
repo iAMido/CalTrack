@@ -8,6 +8,11 @@ class Config(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
+        # The dotenv source loads every key in .env, and pydantic-settings
+        # defaults to extra="forbid" — so a retired variable left in .env
+        # (e.g. STRAVA_CLIENT_ID after the Strava sync was removed) would
+        # crash the bot at import. Ignore unknown keys instead.
+        extra="ignore",
     )
 
     # Telegram
@@ -24,11 +29,6 @@ class Config(BaseSettings):
     supabase_url: str
     supabase_key: str
     supabase_db_password: str = ""
-
-    # Strava (Stage 2)
-    strava_client_id: str = ""
-    strava_client_secret: str = ""
-    strava_refresh_token: str = ""
 
     # App
     user_timezone: str = "Asia/Jerusalem"

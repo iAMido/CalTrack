@@ -27,7 +27,7 @@ Do NOT chain `.on_conflict()` — that method does not exist in supabase-py.
 | `weight_log` | Daily body weight entries |
 | `water_log` | Water intake entries |
 | `caltrack_runs` | Exercise sessions — **a VIEW**, not a table (see root CLAUDE.md). Reads `runcoach.runs` for dates ≥ 2026-06-30; history ≤ 2026-06-29 comes from `_bak_caltrack_runs`. Inserts work via `INSTEAD OF` triggers |
-| `_bak_caltrack_runs` | Physical table behind the `caltrack_runs` view; holds the 28 pre-cutover rows plus every new manual/Strava insert |
+| `_bak_caltrack_runs` | Physical table behind the `caltrack_runs` view; holds the 28 pre-cutover rows plus every new `/run` insert |
 | `daily_summary` | Aggregated daily totals, refreshed after every meal/run/water |
 | `calibration_log` | History of BMR/TDEE recalculations (`calibration_trigger` column, not `trigger`) |
 
