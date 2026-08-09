@@ -15,18 +15,28 @@ A single-user, privacy-first calorie tracker. Photograph meals via Telegram → 
 | Command | Action |
 |---------|--------|
 | 📷 Send photo | Log a meal |
-| `/add lunch 150g chicken breast` | Manually add a food item |
+| `/add lunch 150g chicken breast` | Manually add a food item (freeform, AI-parsed) |
+| `/barcode` | Photo of a barcode → Open Food Facts lookup → logged |
+| `/template` or `/t` | One-tap re-logging from saved meal templates |
+| `/label` | Scan a nutrition label → save as a custom food |
 | `/weight 87.3` | Log body weight |
 | `/water 500` | Log water intake (ml) |
-| `/run 5.2 28:30 152` | Log a run (km, time, heart rate) |
+| `/run 5.2 28:30 152` | Log a run manually (km, time, heart rate) |
 | `/summary` or `/s` | Today's full summary |
+| `/week` or `/w` | This week's summary |
 | `/status` | Remaining calories today |
 | `/history 5` | Last N meals |
 | `/undo` | Cancel last meal |
-| `/label` | Scan a nutrition label → save custom food |
+| `/calibrate` | Recalculate BMR/TDEE from recent data |
+| `/stats` | Bot/database statistics |
 | `/help` | All commands |
 
 Hebrew input is supported everywhere.
+
+**Exercise data is read, not entered.** Runs come from the separate RunCoach
+project through the `caltrack_runs` database view; `/run` exists for anything
+RunCoach doesn't cover. There is no Strava integration — it was removed on
+2026-08-08 once RunCoach became the source of truth.
 
 ---
 
@@ -127,21 +137,28 @@ python -m bot.main
 
 ```
 caltrack/
-├── bot/            # Telegram bot — core application
-│   ├── handlers/   # photo.py, commands.py, callbacks.py, admin.py, label.py
-│   ├── services/   # vision.py, nutrition.py, personal_foods.py, daily_summary.py
-│   ├── db/         # supabase_client.py, queries.py, models.py
-│   └── utils/      # config.py, formatters.py, met_calculator.py
-├── dashboard/      # Streamlit analytics dashboard (Stage 3, not yet built)
-├── data/           # USDA JSON files (gitignored — download separately)
-├── scripts/        # One-time setup scripts
+├── bot/                # Telegram bot — the whole application
+│   ├── handlers/       # photo, commands, callbacks, admin, label, barcode, template
+│   ├── services/       # vision, nutrition, barcode, coach, calibration,
+│   │                   # translator, personal_foods, daily_summary, nudge
+│   ├── db/             # supabase_client.py, queries.py, models.py
+│   └── utils/          # config.py, formatters.py, met_calculator.py, image.py
+├── dashboard/          # Abandoned Streamlit prototype — NOT the live dashboard
+├── data/               # USDA JSON files (gitignored — download separately)
+├── scripts/            # One-time setup + SQL schema files
 ├── Dockerfile          # Container definition (installs libzbar0 for pyzbar)
 ├── docker-compose.yml  # Restart policy, memory cap, log rotation
 ├── deploy.sh           # Pull + rebuild + restart (runs on the VPS)
+├── .gitattributes      # Forces LF so shell scripts work on Linux
 ├── requirements.txt
-├── .env.example    # Environment variable template
-└── .env            # Local secrets (gitignored — never commit)
+├── .env.example        # Environment variable template
+└── .env                # Local secrets (gitignored — never commit)
 ```
+
+> The live web dashboard is **not** in this repo. It's a Next.js app in the
+> `running-coach` repo under `/caltrack`, pointed at the same Supabase project.
+> The `dashboard/` directory here is a dead Streamlit prototype kept only for
+> reference.
 
 ---
 
@@ -164,9 +181,15 @@ caltrack/
 
 | Stage | Features | Status |
 |-------|----------|--------|
-| 1 — MVP | Photo logging, inline confirmation, daily summary, /run /weight /water /undo | ✅ Complete |
-| 2 — Learning | /label, /add, Hebrew input, personal food history, auto-approve | ✅ Complete |
-| 3 — AI Coach | Weekly Hebrew report, Streamlit dashboard, BMR calibration | 📋 Planned |
-| 4 — Extras | Barcode scan, Garmin, reminders, Next.js dashboard | 📋 Future |
+| 1 — MVP | Photo logging, inline confirmation, daily summary, `/run` `/weight` `/water` `/undo` | ✅ Complete |
+| 2 — Learning | `/label`, `/add`, Hebrew input, personal food history, meal editing | ✅ Complete |
+| 2.5 — Dashboard | Next.js dashboard (in `running-coach`): meals CRUD, weight, overview | ✅ Complete |
+| 3 — AI Coach | Weekly Hebrew report, BMR calibration, reports saved to DB | ✅ Complete |
+| 3.5 — Templates & Barcode | `/template`, `/barcode`, meal photos in dashboard | ✅ Complete |
+| 4 — Extras | Garmin sync, richer reminders, photo improvements | 📋 Future |
 
-See [caltrack-architecture.md](caltrack-architecture.md) for the full technical blueprint.
+See [CLAUDE.md](CLAUDE.md) for current architecture and design decisions, and
+[WHATS_NEXT.md](WHATS_NEXT.md) for recent changes.
+[caltrack-architecture.md](caltrack-architecture.md) is the original design
+blueprint — useful for background, but superseded on several points (it predates
+the Hetzner move, the RunCoach exercise view, and the Strava removal).

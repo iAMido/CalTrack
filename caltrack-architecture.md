@@ -5,6 +5,24 @@
 
 ---
 
+> ### ⚠️ Historical document — superseded in places
+>
+> This is the original April 2026 design blueprint. It is kept for background and
+> rationale, but the system has since diverged from it. For what is actually true
+> today, read **[CLAUDE.md](CLAUDE.md)** and **[README.md](README.md)**.
+>
+> Known differences as of 2026-08-10:
+>
+> | This document says | Reality |
+> |---|---|
+> | Exercise data comes from the Strava API | **No Strava integration.** Removed 2026-08-08. Runs arrive from the RunCoach project via the `caltrack_runs` view; `/run` is the only writer. |
+> | `caltrack_runs` is a table | It is a **view**, with `INSTEAD OF` triggers routing `/run` writes to `_bak_caltrack_runs`. History before the 2026-06-29 cutover is served from preserved CalTrack rows. |
+> | Hosting on Railway / Fly.io | **Hetzner VPS**, Docker container on the same box as the TARS bot. Railway retired 2026-08-10. |
+> | Analytics dashboard in Streamlit | **Next.js**, and it lives in the `running-coach` repo at `/caltrack`. The `dashboard/` directory here is a dead prototype. |
+> | Stage 3+ features are planned | Stages 1 through 3.5 are **complete**. |
+
+---
+
 ## Table of Contents
 
 1. [Project Overview](#1-project-overview)
