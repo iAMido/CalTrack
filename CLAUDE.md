@@ -111,33 +111,68 @@ python -m bot.main
 | `SUPABASE_KEY` | service_role key (bypasses RLS) |
 | `USER_TIMEZONE` | e.g. `Asia/Jerusalem` |
 
-## Deployment (Railway)
-The bot runs 24/7 on Railway. `master` branch is the production branch — every push triggers an automatic redeploy.
+## Deployment (Hetzner + Docker)
+The bot runs 24/7 in a Docker container on the Hetzner box `tars-prod`, alongside
+the TARS bot. **Railway was retired 2026-08-10** — it charged a $5/mo base fee for
+one long-polling process, and the box already had 6.7 GB of RAM idle. CalTrack's
+actual footprint is ~60 MB.
 
-**Railway files (safe to commit):**
-- `railway.toml` — build config (`startCommand = "python -m bot.main"`)
-- `Dockerfile` — Docker container definition (Railway auto-detects Dockerfile over nixpacks)
-- `.dockerignore` — must include `!requirements.txt` (has `*.txt` pattern that would exclude it)
-- `Procfile` — process type fallback
+Reach the box with `ssh tars-vps` (user `tars`, key auth, over Tailscale).
 
-**Railway files (gitignored):**
-- `.railway/` — local Railway CLI auth tokens, never commit
+**Layout on the box:**
+- `~/caltrack/` — git checkout, hard-reset to origin on every deploy. Never edit here.
+- `/etc/caltrack/caltrack.env` — the 8 runtime secrets, `root:tars 0640`.
+  Group-readable by `tars` on purpose: both `docker compose` and the restic
+  backup job run as `tars` and must read it.
+- Logs — `docker compose logs`, capped at 10 MB × 5 by `docker-compose.yml`.
 
-**Secrets in production:** Set all env vars in Railway dashboard → Service → Variables. Never in any committed file.
-
-**Git → Railway workflow:**
+**Deploy workflow:**
 ```bash
-git add <files>
-git commit -m "..."
-git push origin master   # triggers Railway redeploy (~2 min)
+git push origin master
+ssh tars-vps "cd ~/caltrack && ./deploy.sh"   # pull, rebuild, restart
 ```
 
-**Dependency rule:** `python-telegram-bot==21.3` requires `httpx~=0.27`. Use `supabase>=2.7.0` — older supabase pins httpx<0.26 and causes a build conflict.
+**Files that matter:**
+- `Dockerfile` — installs `libzbar0` (required by `pyzbar`; the container has no
+  system Python packages to fall back on)
+- `docker-compose.yml` — `restart: unless-stopped`, `mem_limit: 768m`, log caps.
+  **Never add a `ports:` block** — the bot only makes outbound connections, and
+  Docker's iptables rules would punch straight through UFW.
+- `.dockerignore` — must keep `!requirements.txt` (the `*.txt` pattern above it
+  would otherwise exclude the manifest and break the build). `.gitignore` has the
+  same trap and the same escape.
+- `.gitattributes` — forces LF on `*.sh`/`*.yml`/`Dockerfile`. Development is on
+  Windows; a CRLF shebang fails on Linux with `bad interpreter: ...^M`.
 
-**Important:** Only one bot instance can poll Telegram at a time. Running locally while Railway is active causes a 409 Conflict error. Kill local processes before deploying, or stop Railway before running locally.
+**Backups:** `/etc/caltrack/caltrack.env` is included in the TARS restic backup
+(`~/tars/scripts/tars-backup.sh`), which runs hourly to Backblaze B2. That file is
+the only CalTrack state not in Supabase or git.
+
+**Dependency rule:** `python-telegram-bot==21.3` requires `httpx~=0.27`. Use
+`supabase>=2.7.0` — older supabase pins httpx<0.26 and causes a build conflict.
+
+**Important:** Only one bot instance can poll Telegram at a time. Running locally
+while the container is up causes a 409 Conflict. Run `docker compose down` on the
+box first, or don't run locally.
+
+**Restart semantics — `docker kill` is not a crash test.** Docker flags any
+`docker kill`/`docker stop` as a *manual* stop, and `restart: unless-stopped`
+deliberately does not restart from those. `os.kill(1, SIGKILL)` from inside the
+container does nothing either — the kernel shields PID 1 from signals originating
+in its own namespace. To genuinely test crash recovery:
+```bash
+ssh tars-vps 'sudo kill -9 $(docker inspect caltrack --format "{{.State.Pid}}")'
+```
+Then confirm `RestartCount` incremented.
 
 ## Security
 - Telegram: all updates checked against `TELEGRAM_ALLOWED_CHAT_ID`
-- Supabase: service_role key kept in `.env` (gitignored) and in Railway Variables — never committed
+- Supabase: service_role key kept in `.env` (gitignored) locally and in
+  `/etc/caltrack/caltrack.env` (`root:tars 0640`) in production — never committed
 - Photos stored in private Supabase Storage bucket `meals` (no public URLs)
-- Railway: no secrets in `railway.toml` — all secrets injected at runtime via Railway Variables
+- Host firewall denies all inbound except `22/tcp` and the tailnet. CalTrack needs
+  no inbound ports; if a change appears to require one, something is wrong.
+- **`httpx` logging is pinned to WARNING in `bot/main.py`.** Telegram embeds the
+  bot token in the URL path, and `httpx` logs full URLs at INFO — leaving it at
+  INFO writes the token to disk in cleartext every ~10 seconds. Do not revert this
+  to INFO for debugging without redacting.

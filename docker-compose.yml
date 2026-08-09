@@ -1,0 +1,31 @@
+# CalTrack — Docker Compose for the Hetzner box (tars-prod).
+#
+# The bot is a Telegram long-poller: it opens outbound connections only and
+# publishes NO ports. Nothing here should ever add a `ports:` block — the host
+# firewall denies all inbound traffic except SSH and the tailnet, and Docker
+# writes its own iptables rules that would bypass UFW if ports were published.
+#
+# Secrets are NOT in this file and never should be. They live in
+# /etc/caltrack/caltrack.env (root:tars 0640) so that the `tars` user can read
+# it — needed both by `docker compose` here and by the restic backup job, which
+# runs as `tars` and includes that path.
+
+services:
+  caltrack:
+    build: .
+    container_name: caltrack
+    restart: unless-stopped
+    env_file: /etc/caltrack/caltrack.env
+
+    # Without a cap, Docker's json-file logs grow unbounded and will eventually
+    # fill the disk. 10m x 5 = 50 MB ceiling.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+    # Guardrail, not a target. Steady state is ~200 MB (Python + the 8k-row
+    # in-memory USDA cache). This exists so a CalTrack leak can never grow
+    # large enough to OOM-kill tars.service on the shared box.
+    mem_limit: 768m

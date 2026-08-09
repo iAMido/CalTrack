@@ -37,6 +37,16 @@ logging.basicConfig(
     format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
     level=logging.INFO,
 )
+
+# httpx logs every request URL at INFO. Telegram puts the bot token *in* the
+# URL path (api.telegram.org/bot<TOKEN>/getUpdates), so leaving this at INFO
+# writes the token to disk in cleartext roughly every 10 seconds — anyone who
+# can read the logs can take over the bot. WARNING still surfaces real
+# transport failures. Supabase URLs go through the same client, so this also
+# stops the service_role key's host from being logged on every query.
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+
 logger = logging.getLogger(__name__)
 
 

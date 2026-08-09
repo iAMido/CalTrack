@@ -30,30 +30,41 @@ Hebrew input is supported everywhere.
 
 ---
 
-## Deployment (Railway — Production)
+## Deployment (Hetzner + Docker — Production)
 
-The bot runs 24/7 on [Railway](https://railway.app). Every `git push` to `master` triggers an automatic redeploy.
+The bot runs 24/7 in a Docker container on the Hetzner VPS `tars-prod`, sharing the
+box with the TARS bot. Access is `ssh tars-vps` over Tailscale.
 
-### Initial Railway Setup
+> **Railway was retired on 2026-08-10.** It billed a $5/mo base fee to run a single
+> long-polling process, while the existing VPS had ~6.7 GB of RAM sitting idle.
+> CalTrack uses about 60 MB there, so the move costs nothing extra.
 
-1. Create a new Railway project and link it to this GitHub repo
-2. Set all environment variables in the Railway dashboard (Settings → Variables) — see list below
-3. Railway uses `railway.toml` + `Dockerfile` automatically — no manual config needed
-
-### Git Workflow
+### Deploy
 
 ```bash
-# Make changes locally
-git add <files>
-git commit -m "description of change"
-git push origin master   # triggers automatic Railway redeploy
+git push origin master
+ssh tars-vps "cd ~/caltrack && ./deploy.sh"
 ```
 
-Railway will build and redeploy within ~2 minutes. Monitor progress in the Railway dashboard under Deployments.
+`deploy.sh` fetches, hard-resets to `origin/master`, rebuilds the image, and
+restarts the container. **The checkout on the box is disposable — never edit files
+there**, since the reset will discard them.
 
-### Environment Variables (Railway Dashboard)
+Useful commands:
 
-Set these in Railway → Service → Variables. **Never put secrets in any file.**
+```bash
+ssh tars-vps "cd ~/caltrack && docker compose logs --tail 50"
+ssh tars-vps "cd ~/caltrack && docker compose restart"
+ssh tars-vps "cd ~/caltrack && docker compose down"     # full stop
+```
+
+### Environment Variables
+
+Production values live in `/etc/caltrack/caltrack.env` on the box, owned
+`root:tars` mode `0640`. **Never put secrets in any committed file.**
+
+The group-read bit is deliberate: both `docker compose` (via `env_file`) and the
+restic backup job run as the `tars` user and must be able to read it.
 
 | Variable | Purpose |
 |----------|---------|
@@ -66,13 +77,24 @@ Set these in Railway → Service → Variables. **Never put secrets in any file.
 | `SUPABASE_KEY` | Supabase service_role key |
 | `USER_TIMEZONE` | e.g. `Asia/Jerusalem` |
 
-### Railway Files (safe to commit)
+These eight are the complete set. Strava variables are **not** used — that
+integration was removed on 2026-08-08 and runs now arrive from RunCoach through
+the `caltrack_runs` view. `SUPABASE_DB_PASSWORD` is not read by the bot either.
+
+### Deployment files
 
 | File | Purpose |
 |------|---------|
-| `railway.toml` | Build and start command config |
-| `Dockerfile` | Container definition |
-| `Procfile` | Process type definition (fallback) |
+| `Dockerfile` | Container definition; installs `libzbar0` for `pyzbar` |
+| `docker-compose.yml` | Restart policy, memory cap, log rotation, `env_file` |
+| `deploy.sh` | Pull, rebuild, restart (runs on the box) |
+| `.gitattributes` | Forces LF endings so shell scripts work on Linux |
+
+### Backups
+
+`/etc/caltrack/caltrack.env` is included in the TARS restic backup to Backblaze
+B2, which runs hourly. It is the only piece of CalTrack state that lives neither
+in Supabase nor in git.
 
 ---
 
@@ -113,9 +135,9 @@ caltrack/
 ├── dashboard/      # Streamlit analytics dashboard (Stage 3, not yet built)
 ├── data/           # USDA JSON files (gitignored — download separately)
 ├── scripts/        # One-time setup scripts
-├── Dockerfile      # Railway / Docker deployment
-├── railway.toml    # Railway build config
-├── Procfile        # Process definition
+├── Dockerfile          # Container definition (installs libzbar0 for pyzbar)
+├── docker-compose.yml  # Restart policy, memory cap, log rotation
+├── deploy.sh           # Pull + rebuild + restart (runs on the VPS)
 ├── requirements.txt
 ├── .env.example    # Environment variable template
 └── .env            # Local secrets (gitignored — never commit)
@@ -125,10 +147,16 @@ caltrack/
 
 ## Security
 
-- **Secrets**: All API keys and tokens are in `.env` locally and in Railway Variables for production. Neither is committed to git.
+- **Secrets**: All API keys and tokens are in `.env` locally and in
+  `/etc/caltrack/caltrack.env` (`root:tars 0640`) in production. Neither is committed to git.
 - **Telegram**: Every incoming message is checked against `TELEGRAM_ALLOWED_CHAT_ID`. Unauthorized users get no response.
 - **Supabase**: Uses `service_role` key (kept private). Photos stored in a private storage bucket with no public URLs.
-- **Railway**: No secrets in `railway.toml` or any committed file. The `.railway/` local CLI folder is gitignored.
+- **Network**: The VPS firewall denies all inbound traffic except SSH and the
+  tailnet. The bot long-polls outbound only and publishes no ports — never add a
+  `ports:` block to `docker-compose.yml`, as Docker's iptables rules bypass UFW.
+- **Log hygiene**: `httpx` logging is pinned to `WARNING` in `bot/main.py`. Telegram
+  embeds the bot token in the request URL, and `httpx` logs full URLs at `INFO` —
+  which would write the token to disk in cleartext every few seconds.
 
 ---
 

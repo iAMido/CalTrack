@@ -89,6 +89,9 @@ data/*.zip
 # Sensitive local files
 settings.txt
 *.txt
+# ...but the dependency manifest must stay tracked; the blanket *.txt above
+# would otherwise silently drop it and break the Docker build.
+!requirements.txt
 
 # IDE
 .idea/

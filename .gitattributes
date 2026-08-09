@@ -1,0 +1,8 @@
+# Development happens on Windows; the bot runs on Linux (tars-prod) and inside
+# a Linux container. Anything executed by a shell or by Docker must keep LF
+# endings — a CRLF shebang fails on Linux with "bad interpreter: ...^M".
+*.sh            text eol=lf
+Dockerfile      text eol=lf
+.dockerignore   text eol=lf
+*.yml           text eol=lf
+*.yaml          text eol=lf
