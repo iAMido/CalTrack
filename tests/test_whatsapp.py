@@ -205,6 +205,49 @@ def test_card_steps_and_save():
     assert "pending_meal" not in d.session.user_data and rec.texts[-1].startswith("❌")
 
 
+def test_hebrew_rewrites():
+    import re
+    from bot.services.calibration import format_calibration_message
+    from bot.utils.formatters import format_daily_summary
+    from bot.whatsapp.he import HELP, he_text
+
+    def no_english(t):
+        left = re.sub(r"`[^`]*`|BMR|TDEE|AI|CalTrack|[A-Za-z]+@", "", t)
+        return not re.search(r"[A-Za-z]{3,}", left), left
+
+    daily = {"total_calories_in": 931, "target_calories": 2200, "total_protein_g": 38, "total_carbs_g": 95,
+             "total_fat_g": 40, "total_fiber_g": 5, "water_ml": 1500, "weight_kg": 85.2}
+    meals = [{"meal_type": "dinner", "total_calories": 931, "eaten_at": "2026-10-15T18:45:00+00:00"}]
+    summary = he_text(format_daily_summary("Thursday, October 15, 2026", daily, meals))
+    assert summary.startswith("📊 *יום חמישי 15/10*") and "ארוחת ערב 21:45 — 931 קל׳" in summary, summary
+    assert "גירעון: *-1,269* קל׳" in summary and "חלבון 38 · פחמ׳ 95" in summary
+    status = he_text("✅ *Today's status*\nIn: 931 kcal | Out: 0 kcal\nNet: 931 / 2,200 kcal\nRemaining: *1,269 kcal*\n\n"
+                     "🔴 Protein: 38g / 136g (28%) — *98g* to go\n🟠 Fiber: 5g / 25g (20%) — *20g* to go")
+    nudge = he_text("🥗 *Lunch not logged yet*\nSend a photo or use `/add צהריים ...`\n\nQuick options:\n  /t טוסט (320 kcal)")
+    assert nudge.startswith("🥗 *עוד לא רשמת ארוחת צהריים*") and "אפשרויות מהירות" in nudge and "תבנית טוסט (320 קל׳)" in nudge
+    hist = he_text("📋 *Last 2 meals:*\n\n• Oct 15 21:45 — Dinner: 931 kcal\n• Oct 15 13:10 — Lunch: 640 kcal")
+    assert "• 15/10 21:45 — ארוחת ערב: 931 קל׳" in hist
+    cal = he_text(format_calibration_message({"trigger": "weekly_auto", "weight_used_kg": 85.1, "weight_trend_7d": -0.4,
+                                              "old_bmr": 1800, "new_bmr": 1790, "old_tdee": 2500, "new_tdee": 2480,
+                                              "old_target": 2000, "new_target": 1980}))
+    others = [he_text(x) for x in (
+        "⚖️ Weight logged: *85.2 kg*", "💧 Water logged: *500 ml*",
+        "🏃 *Run logged!*\n5.2 km | 28:30 | 5:29/km | ❤️ 152\nBurned: ~420 kcal",
+        "✅ Added to lunch\n*פיתה שווארמה*\n  • pita (80g) — 220 kcal\n*Total: 650 kcal*\n\n"
+        "Today: *1,581 / 2,200 kcal* | Remaining: *619 kcal*",
+        "Undo last meal? *Dinner* (931 kcal)", "Usage: `/weight 87.3`", "❌ Keep it")]
+    assert he_text("🤖 *CalTrack Commands*\n...") == HELP
+    for t in [summary, status, nudge, hist, cal, *others]:
+        ok, left = no_english(t.replace("pita", ""))
+        assert ok, f"English left: {left!r}"
+
+
+def test_hebrew_command_words():
+    names = server.commands()
+    assert server.parse_command("משקל 85.2", {}, names) == ("משקל", ["85.2"]) and names["משקל"] is names["weight"]
+    assert names["סיכום"] is names["s"] and names["מים"] is names["water"]
+
+
 if __name__ == "__main__":
     fails = 0
     for name, fn in list(globals().items()):

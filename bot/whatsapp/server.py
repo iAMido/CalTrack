@@ -35,7 +35,9 @@ def commands() -> dict:
     from bot.handlers.label import handle_label
     from bot.handlers.template import handle_template
 
-    return {
+    from bot.whatsapp.he import COMMAND_ALIASES
+
+    cmds = {
         "weight": c.handle_weight, "water": c.handle_water, "run": c.handle_run,
         "summary": c.handle_summary, "s": c.handle_summary,
         "week": c.handle_week, "w": c.handle_week,
@@ -44,6 +46,8 @@ def commands() -> dict:
         "stats": handle_stats, "help": c.handle_help, "start": c.handle_help,
         "barcode": handle_barcode_command, "template": handle_template, "t": handle_template,
     }
+    cmds.update({he: cmds[en] for he, en in COMMAND_ALIASES.items()})
+    return cmds
 
 
 def parse_command(text: str, user_data: dict, names) -> tuple[str, list[str]] | None:
