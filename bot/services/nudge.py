@@ -60,6 +60,8 @@ async def _send_if_missing(
         logger.info(f"Nudge: {meal_type} already logged today, skipping.")
         return
     hints = await _build_template_hints(profile["id"])
+    from bot.whatsapp import gateway as wa
+    await wa.notify(f"{text}{hints}")
     await context.bot.send_message(
         chat_id=config.telegram_allowed_chat_id,
         text=f"{text}{hints}",

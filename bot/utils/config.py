@@ -19,6 +19,13 @@ class Config(BaseSettings):
     telegram_bot_token: str
     telegram_allowed_chat_id: int
 
+    # WhatsApp (via TARS's wa-gateway on the same box; bot/whatsapp/).
+    # Off unless WA_TOKEN is set. The gateway routes the "CalTrack" group here.
+    wa_token: str = ""
+    wa_gateway_url: str = "http://127.0.0.1:8089"
+    wa_listen_host: str = "127.0.0.1"
+    wa_listen_port: int = 8093
+
     # OpenRouter
     openrouter_api_key: str = ""
     openrouter_vision_model: str = "openai/gpt-4o"
@@ -39,6 +46,10 @@ class Config(BaseSettings):
     @property
     def allowed_chat_ids(self) -> set[int]:
         return {self.telegram_allowed_chat_id}
+
+    @property
+    def wa_enabled(self) -> bool:
+        return len(self.wa_token) >= 32
 
 
 config = Config()
