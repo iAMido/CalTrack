@@ -14,13 +14,14 @@ import re
 from aiohttp import web
 
 from bot.utils.config import config
-from bot.whatsapp import gateway
+from bot.whatsapp import cards, gateway
 from bot.whatsapp.shim import Outbox, Session, WACallbackQuery, WAContext, WAMessage, WAUpdate
 
 logger = logging.getLogger(__name__)
 
 # Text states where the next message is an answer, not a command.
-AWAITING = ("awaiting_rename_item", "awaiting_manual_weight", "awaiting_add_item", "waiting_for")
+AWAITING = ("awaiting_rename_item", "awaiting_manual_weight", "awaiting_add_item", "waiting_for", "wa_await")
+FIX_ITEM = re.compile(r"^\s*(\d{1,2})\s+(\S.*)$")
 # "1 150" / "2 80g" → set item 1 to 150 g (replaces the gram buttons).
 SET_WEIGHT = re.compile(r"^\s*(\d{1,2})\s+(\d{1,4})\s*(?:g|gr|ג|גר|גרם)?\s*$", re.IGNORECASE)
 SEEN_MAX = 500
@@ -123,8 +124,12 @@ class Dispatcher:
             msg = WAMessage(self.outbox, text=text)
             await cmds[name](WAUpdate(message=msg), self.ctx(args))
             return
-        m = SET_WEIGHT.match(text)
         pending = ud.get("pending_meal")
+        step = ud.pop("wa_await", None)
+        if step and pending:
+            await self.multi_item_step(step, text, pending)
+            return
+        m = SET_WEIGHT.match(text)
         if m and pending and not any(k in ud for k in AWAITING):
             idx, grams = int(m.group(1)) - 1, int(m.group(2))
             if 0 <= idx < len(pending.get("items", [])) and grams > 0:
@@ -145,10 +150,78 @@ class Dispatcher:
             return
         await self.callback(data)
 
+    async def multi_item_step(self, step: str, text: str, pending: dict) -> None:
+        """Typed answer to ✏️/🔄 on a meal with several items ("2 150", "2 חזה עוף")."""
+        n = len(pending.get("items") or [])
+        if step == "grams":
+            m = SET_WEIGHT.match(text)
+            if m and 0 < int(m.group(1)) <= n and int(m.group(2)) > 0:
+                await self.callback(f"w:{int(m.group(1)) - 1}:{int(m.group(2))}")
+                return
+        elif step == "fix":
+            m = FIX_ITEM.match(text)
+            if m and 0 < int(m.group(1)) <= n:
+                from bot.handlers.callbacks import handle_text_input
+                self.session.user_data["awaiting_rename_item"] = int(m.group(1)) - 1
+                msg = WAMessage(self.outbox, text=m.group(2))
+                await handle_text_input(WAUpdate(message=msg), self.ctx())
+                return
+        self.session.user_data["wa_await"] = step
+        await gateway.send_text("לא הבנתי. " + cards.prompt_for(f"wa:{step}", pending))
+
     async def callback(self, data: str) -> None:
         from bot.handlers.callbacks import handle_callback
+        ud = self.session.user_data
+        pending = ud.get("pending_meal")
+        if data == "wa:cancel":
+            for k in ("pending_meal", *AWAITING):
+                ud.pop(k, None)
+            await gateway.send_text("❌ בוטל — הארוחה לא נשמרה.")
+            return
+        prompt = cards.prompt_for(data, pending) if pending else None
+        if prompt:
+            for k in AWAITING:
+                ud.pop(k, None)
+            if data.startswith("w:"):
+                ud["awaiting_manual_weight"] = int(data.split(":")[1])
+            elif data.startswith("rename:"):
+                ud["awaiting_rename_item"] = int(data.split(":")[1])
+            elif data == "add":
+                ud["awaiting_add_item"] = True
+            else:
+                ud["wa_await"] = data.split(":", 1)[1]
+            await gateway.send_text(prompt)
+            return
         q = WACallbackQuery(self.outbox, data)
+        if data == "ok" and pending:
+            await self.save(q, pending)
+            return
         await handle_callback(WAUpdate(callback_query=q), self.ctx())
+
+    async def save(self, q, pending: dict) -> None:
+        """✅: the handler saves; the reply is the Hebrew card, not its English one."""
+        from datetime import datetime
+
+        import pytz
+
+        from bot.db import queries as db_queries
+        from bot.handlers.callbacks import handle_callback
+        from bot.services.nutrition import calculate_meal_totals
+
+        kcal = int(round(calculate_meal_totals(pending["items"])["total_calories"] or 0))
+        self.outbox.capture = []
+        try:
+            await handle_callback(WAUpdate(callback_query=q), self.ctx())
+        finally:
+            said, self.outbox.capture = self.outbox.capture, None
+        if "pending_meal" in self.session.user_data:      # not saved (no profile, …): show why
+            for t in said:
+                await gateway.send_text(t)
+            return
+        profile = await db_queries.get_user_profile()
+        today = datetime.now(pytz.timezone(config.user_timezone)).strftime("%Y-%m-%d")
+        daily = await db_queries.refresh_daily_summary(today, profile["id"]) if profile else {}
+        await gateway.send_text(cards.render_saved(kcal, daily or {}))
 
 
 def build_app(dispatcher: Dispatcher) -> web.Application:
