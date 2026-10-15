@@ -63,6 +63,10 @@ def build_meal_keyboard(pending_meal: dict, nutrition_map: dict) -> tuple[str, I
             conf_pct = int(confidence * 100)
             lines.append(f"*{idx + 1}. {name}* ({name_he})")
             lines.append(f"   AI estimate: {ai_weight}g (confidence: {conf_pct}%)")
+            if weight != ai_weight:
+                # The chosen weight was only visible as a ✓ on a button; a typed
+                # weight (or WhatsApp, which has no buttons) showed nowhere.
+                lines.append(f"   ✏️ Set to: *{weight}g* ({cal} kcal)")
 
             # Build weight buttons from suggestions
             btn_row = [InlineKeyboardButton(f"{idx + 1}.", callback_data="noop")]
