@@ -32,6 +32,8 @@ from bot.handlers.barcode import handle_barcode_command
 from bot.handlers.template import handle_template
 from bot.handlers.callbacks import handle_callback, handle_text_input
 from bot.handlers.admin import handle_calibrate, handle_stats
+from bot.whatsapp import gateway as wa
+from bot.whatsapp import server as wa_server
 
 logging.basicConfig(
     format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
@@ -55,6 +57,7 @@ async def weekly_calibration_job(context) -> None:
     try:
         result = await recalibrate(trigger="weekly_auto")
         msg = format_calibration_message(result)
+        await wa.notify(msg)
         await context.bot.send_message(
             chat_id=config.telegram_allowed_chat_id,
             text=msg,
@@ -75,6 +78,7 @@ async def weekly_coach_job(context) -> None:
             return
 
         report = await run_weekly_coach(profile["id"])
+        await wa.notify(report)
         chunks = split_for_telegram(report)
         for chunk in chunks:
             await context.bot.send_message(
@@ -134,6 +138,12 @@ async def post_init(application: Application) -> None:
         time=dt_time(19, 30, tzinfo=tz),
         name="nudge_dinner",
     )
+
+    # WhatsApp group (via TARS's wa-gateway) — off unless WA_TOKEN is set.
+    try:
+        application.bot_data["wa_runner"] = await wa_server.start()
+    except Exception as e:
+        logger.error(f"WhatsApp listener failed to start: {type(e).__name__}: {e}")
 
     logger.info("CalTrack bot ready.")
 

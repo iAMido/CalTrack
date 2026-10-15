@@ -16,6 +16,10 @@ services:
     container_name: caltrack
     restart: unless-stopped
     env_file: /etc/caltrack/caltrack.env
+    # Host network (2026-10-15, WhatsApp): reach TARS's wa-gateway on
+    # 127.0.0.1:8089 and listen on 127.0.0.1:8093 for the CalTrack group.
+    # Still no `ports:`; the listener binds loopback only.
+    network_mode: host
 
     # Without a cap, Docker's json-file logs grow unbounded and will eventually
     # fill the disk. 10m x 5 = 50 MB ceiling.

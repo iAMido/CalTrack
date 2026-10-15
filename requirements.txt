@@ -16,6 +16,9 @@ pytz==2024.1
 # HTTP client (used by vision, nutrition, coach, translator)
 httpx>=0.25.0
 
+# WhatsApp inbound endpoint (bot/whatsapp/server.py)
+aiohttp==3.9.5
+
 # Async file I/O
 aiofiles==23.2.1
 
