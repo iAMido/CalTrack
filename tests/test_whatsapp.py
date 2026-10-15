@@ -118,7 +118,7 @@ def test_flow_photo_poll_vote_and_shortcut():
     d = server.Dispatcher()
     run(d.handle({"type": "message", "id": "IMG1", "kind": "image", "has_media": True, "text": ""}))
     assert seen["photo"] == b"JPEGIMG1"
-    assert rec.texts[0] == "🍽 *Lunch*" and rec.polls[0][0] == shim.POLL_QUESTION_WEIGHTS
+    assert rec.texts[0] == "🍽 *Lunch*" and rec.polls[0][0] == shim.POLL_QUESTION_MEAL
 
     run(d.handle({"type": "poll_vote", "poll_id": "P1", "selected": ["✅ Confirm All"]}))
     run(d.handle({"type": "poll_vote", "poll_id": "P1", "selected": []}))           # withdrawn: nothing

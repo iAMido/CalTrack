@@ -207,6 +207,7 @@ async def _handle_confirm_all(query, context) -> None:
 
     # Clear pending state
     context.user_data.pop("pending_meal", None)
+    logger.info(f"Meal saved: {meal_id} ({pending['meal_type']}, {totals['total_calories']} kcal)")
 
     await query.edit_message_text(format_post_save(daily), parse_mode="Markdown")
 
