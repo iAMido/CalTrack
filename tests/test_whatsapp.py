@@ -16,7 +16,7 @@ for k, v in {"TELEGRAM_BOT_TOKEN": "1:x", "TELEGRAM_ALLOWED_CHAT_ID": "555",
 
 from telegram import InlineKeyboardButton as B, InlineKeyboardMarkup as M  # noqa: E402
 
-from bot.whatsapp import gateway, server, shim  # noqa: E402
+from bot.whatsapp import cards, gateway, server, shim  # noqa: E402
 
 
 class Rec:
@@ -37,6 +37,7 @@ class Rec:
         gateway.send_text, gateway.send_poll, gateway.fetch_media = send_text, send_poll, fetch_media
         shim.gateway.send_text = send_text
         server.gateway.send_text = send_text
+        shim.gateway.send_poll = send_poll
 
 
 def meal_markup(n_items, sugg=(100, 150, 200)):
@@ -118,9 +119,11 @@ def test_flow_photo_poll_vote_and_shortcut():
     d = server.Dispatcher()
     run(d.handle({"type": "message", "id": "IMG1", "kind": "image", "has_media": True, "text": ""}))
     assert seen["photo"] == b"JPEGIMG1"
-    assert rec.texts[0] == "🍽 *Lunch*" and rec.polls[0][0] == shim.POLL_QUESTION_MEAL
+    assert rec.polls[0][0] == cards.POLL_QUESTION
+    assert list(rec.polls[0][1]) == [cards.SAVE, cards.GRAMS, cards.FIX_MANY, cards.ADD, cards.CANCEL]
+    assert "🔥" in rec.texts[0] and "Lunch" not in rec.texts[0]          # the Hebrew card, not Telegram's
 
-    run(d.handle({"type": "poll_vote", "poll_id": "P1", "selected": ["✅ Confirm All"]}))
+    run(d.handle({"type": "poll_vote", "poll_id": "P1", "selected": [cards.SAVE]}))
     run(d.handle({"type": "poll_vote", "poll_id": "P1", "selected": []}))           # withdrawn: nothing
     run(d.handle({"type": "message", "id": "T1", "kind": "text", "text": "2 80g"}))  # shortcut
     run(d.handle({"type": "message", "id": "T2", "kind": "text", "text": "9 80"}))   # no item 9 → text
@@ -150,6 +153,56 @@ def test_dedupe_and_auth():
             await client.close()
 
     run(go())
+
+
+def test_card_steps_and_save():
+    rec = Rec()
+    rec.install()
+    import bot.handlers.callbacks as cb
+    import bot.db.queries as q
+
+    async def fake_callback(update, context):
+        data = update.callback_query.data
+        rec.calls.append(data)
+        if data == "ok":
+            context.user_data.pop("pending_meal", None)
+            await update.callback_query.edit_message_text("✅ *Saved!* english")
+
+    async def fake_text(update, context):
+        rec.calls.append(("text", update.message.text, context.user_data.get("awaiting_rename_item")))
+
+    async def profile():
+        return {"id": "u1"}
+
+    async def refresh(day, uid):
+        return {"total_calories_in": 1500, "target_calories": 2200, "meal_count": 3, "water_ml": 1500}
+
+    cb.handle_callback, cb.handle_text_input = fake_callback, fake_text
+    q.get_user_profile, q.refresh_daily_summary = profile, refresh
+
+    one = {"meal_type": "dinner", "items": [{"ingredient_name_he": "פיצה גבינה", "weight_grams": 350,
+                                              "ai_estimated_grams": 200, "calories": 931}]}
+    card = cards.render_meal(one, "21:45")
+    assert "*פיצה גבינה* — 350 גר׳ · 931 קל׳" in card and "הערכת AI: 200" in card and "ארוחת ערב" in card
+    assert list(cards.meal_options(one).values()) == ["ok", "w:0:m", "rename:0", "add", "wa:cancel"]
+
+    d = server.Dispatcher()
+    d.session.user_data["pending_meal"] = {"meal_type": "lunch", "items": [{"calories": 100}, {"calories": 50}]}
+    run(d.callback("wa:grams"))
+    assert d.session.user_data["wa_await"] == "grams" and "2 150" in rec.texts[-1]
+    run(d.text("weight"))                                     # not a command while a step waits
+    assert rec.texts[-1].startswith("לא הבנתי") and d.session.user_data["wa_await"] == "grams"
+    run(d.text("2 150"))
+    run(d.callback("wa:fix"))
+    run(d.text("1 חזה עוף"))
+    assert rec.calls == ["w:1:150", ("text", "חזה עוף", 0)]
+    run(d.callback("w:0:m"))                                  # ✏️ on a single item → Hebrew prompt, no handler
+    assert d.session.user_data["awaiting_manual_weight"] == 0 and "כמה גרם" in rec.texts[-1]
+    run(d.callback("ok"))
+    assert "✅ *נשמר* · 150 קל׳" in rec.texts[-1] and "1,500 / 2,200" in rec.texts[-1] and "english" not in rec.texts[-1]
+    d.session.user_data["pending_meal"] = {"items": [{}]}
+    run(d.callback("wa:cancel"))
+    assert "pending_meal" not in d.session.user_data and rec.texts[-1].startswith("❌")
 
 
 if __name__ == "__main__":

@@ -13,8 +13,12 @@ a CallbackQuery into handle_callback.
 import re
 from itertools import count
 
+from datetime import datetime
+
+import pytz
+
 from bot.utils.config import config
-from bot.whatsapp import gateway
+from bot.whatsapp import cards, gateway
 
 MAX_OPTIONS = 12
 MAX_POLLS = 50
@@ -83,10 +87,24 @@ class Session:
 class Outbox:
     def __init__(self, session: Session) -> None:
         self.session = session
+        self.capture: list[str] | None = None    # collect instead of sending (server.py)
 
     async def send(self, text: str, reply_markup=None) -> "WAMessage":
-        await gateway.send_text(text)
+        if self.capture is not None:
+            self.capture.append(text)
+            return WAMessage(self)
         options = keyboard_options(reply_markup)
+        pending = self.session.user_data.get("pending_meal")
+        if pending and {"ok", "add"} <= set(options.values()):
+            # The meal keyboard → the WhatsApp card (cards.py), not Telegram's.
+            now = datetime.now(pytz.timezone(config.user_timezone)).strftime("%H:%M")
+            await gateway.send_text(cards.render_meal(pending, now))
+            meal_opts = cards.meal_options(pending)
+            poll_id = await gateway.send_poll(cards.POLL_QUESTION, list(meal_opts))
+            if poll_id:
+                self.session.remember_poll(poll_id, meal_opts)
+            return WAMessage(self)
+        await gateway.send_text(cards.TRANSLATE.get(text, text))
         if len(options) >= 2:
             has_weights = any(WEIGHT_BUTTON.match(d) or d.endswith(":m") for d in options.values())
             if "ok" in options.values():
