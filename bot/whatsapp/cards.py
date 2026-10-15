@@ -15,16 +15,6 @@ POLL_QUESTION = "לשמור את הארוחה?"
 SAVE, GRAMS, ADD, CANCEL = "✅ שמור", "✏️ שנה כמות", "➕ הוסף פריט", "❌ בטל"
 FIX_MANY = "🔄 תקן פריט"
 
-# Fixed English handler replies → Hebrew (exact match, after Markdown).
-TRANSLATE = {
-    "🔍 Analyzing your meal...": "🔍 מנתח את הארוחה…",
-    "❌ Session expired. Please send the photo again.": "⌛ הארוחה כבר לא פתוחה — שלח את התמונה שוב.",
-    "Session expired. Please send the photo again.": "⌛ הארוחה כבר לא פתוחה — שלח את התמונה שוב.",
-    "Please type the food name.": "כתוב את שם המאכל.",
-    "Please enter a valid number of grams, e.g. `150`": "כתוב מספר גרמים, למשל 150",
-    "Format not recognised. Try: `chicken breast, 150`": "לא הבנתי. כתוב למשל: חזה עוף, 150",
-    "🔄 Please send the photo again to re-analyze.": "🔄 שלח את התמונה שוב לניתוח מחדש.",
-}
 
 
 def item_name(item: dict) -> str:

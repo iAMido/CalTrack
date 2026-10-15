@@ -76,7 +76,8 @@ async def notify(text: str) -> None:
     the Telegram copy is never blocked by a WhatsApp problem."""
     if not config.wa_enabled:
         return
+    from bot.whatsapp.he import he_text
     try:
-        await send_text(text)
+        await send_text(he_text(text))
     except Exception as e:
         logger.warning(f"WhatsApp notify failed: {type(e).__name__}: {e}")

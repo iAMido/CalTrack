@@ -11,23 +11,19 @@ a CallbackQuery into handle_callback.
 """
 
 import re
-from itertools import count
-
 from datetime import datetime
+from itertools import count
 
 import pytz
 
 from bot.utils.config import config
 from bot.whatsapp import cards, gateway
+from bot.whatsapp.he import he_text
 
 MAX_OPTIONS = 12
 MAX_POLLS = 50
 WEIGHT_BUTTON = re.compile(r"^w:\d+:\d+$")
-POLL_QUESTION = "👆 Choose:"
-POLL_QUESTION_WEIGHTS = "👆 Choose — or type e.g. 1 150 to set item 1 to 150 g"
-# A meal waiting for ✅ (Ido 2026-10-15: after "1 350" the new poll looked like
-# a repeat, and the meal was never saved).
-POLL_QUESTION_MEAL = "📝 Not saved yet — vote ✅ Confirm All to save. To change grams type e.g. 1 150"
+POLL_QUESTION = "👆 בחר:"
 
 _ids = count(1)
 
@@ -60,6 +56,7 @@ def keyboard_options(markup) -> dict[str, str]:
         pairs = pairs[:8] + pairs[-4:]
     out: dict[str, str] = {}
     for label, data in pairs:
+        label = he_text(label)
         while label in out:          # poll options must be unique
             label += "\u200b"
         out[label] = data
@@ -104,14 +101,9 @@ class Outbox:
             if poll_id:
                 self.session.remember_poll(poll_id, meal_opts)
             return WAMessage(self)
-        await gateway.send_text(cards.TRANSLATE.get(text, text))
+        await gateway.send_text(he_text(text))
         if len(options) >= 2:
-            has_weights = any(WEIGHT_BUTTON.match(d) or d.endswith(":m") for d in options.values())
-            if "ok" in options.values():
-                question = POLL_QUESTION_MEAL
-            else:
-                question = POLL_QUESTION_WEIGHTS if has_weights else POLL_QUESTION
-            poll_id = await gateway.send_poll(question, list(options))
+            poll_id = await gateway.send_poll(POLL_QUESTION, list(options))
             if poll_id:
                 self.session.remember_poll(poll_id, options)
         elif len(options) == 1:      # a single button: say what to type instead
