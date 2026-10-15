@@ -139,8 +139,17 @@ class Dispatcher:
             if 0 <= idx < len(pending.get("items", [])) and grams > 0:
                 await self.callback(f"w:{idx}:{grams}")
                 return
-        from bot.handlers.callbacks import handle_text_input
         msg = WAMessage(self.outbox, text=text)
+        if not any(k in ud for k in AWAITING):
+            if pending:
+                await gateway.send_text("📝 יש ארוחה פתוחה — בחר בסקר שלמעלה (✅ שמור / ❌ בטל), "
+                                        "או כתוב למשל 1 150 לשינוי כמות.")
+                return
+            # Nothing was asked: plain text in this group is food ("2 ביצים וטוסט")
+            # → the same as "הוסף …" (the phase-3 promise; Ido 2026-10-15).
+            await commands()["add"](WAUpdate(message=msg), self.ctx(text.split()))
+            return
+        from bot.handlers.callbacks import handle_text_input
         await handle_text_input(WAUpdate(message=msg), self.ctx())
 
     async def vote(self, ev: dict) -> None:
