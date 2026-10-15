@@ -96,6 +96,10 @@ class Dispatcher:
 
     async def handle(self, ev: dict) -> None:
         if ev.get("type") == "poll_vote":
+            logger.info(f"WhatsApp vote: {ev.get('selected')}")
+        else:
+            logger.info(f"WhatsApp message: {ev.get('kind')}")
+        if ev.get("type") == "poll_vote":
             await self.vote(ev)
             return
         kind = ev.get("kind")
@@ -135,6 +139,7 @@ class Dispatcher:
         if not selected:                 # a vote was withdrawn
             return
         data = self.session.callback_for(ev.get("poll_id", ""), selected[0])
+        logger.info(f"WhatsApp vote → {data}")
         if data is None:
             await gateway.send_text("⌛ That menu has expired. Please start again.")
             return

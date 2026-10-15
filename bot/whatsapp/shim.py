@@ -21,6 +21,9 @@ MAX_POLLS = 50
 WEIGHT_BUTTON = re.compile(r"^w:\d+:\d+$")
 POLL_QUESTION = "👆 Choose:"
 POLL_QUESTION_WEIGHTS = "👆 Choose — or type e.g. 1 150 to set item 1 to 150 g"
+# A meal waiting for ✅ (Ido 2026-10-15: after "1 350" the new poll looked like
+# a repeat, and the meal was never saved).
+POLL_QUESTION_MEAL = "📝 Not saved yet — vote ✅ Confirm All to save. To change grams type e.g. 1 150"
 
 _ids = count(1)
 
@@ -86,7 +89,10 @@ class Outbox:
         options = keyboard_options(reply_markup)
         if len(options) >= 2:
             has_weights = any(WEIGHT_BUTTON.match(d) or d.endswith(":m") for d in options.values())
-            question = POLL_QUESTION_WEIGHTS if has_weights else POLL_QUESTION
+            if "ok" in options.values():
+                question = POLL_QUESTION_MEAL
+            else:
+                question = POLL_QUESTION_WEIGHTS if has_weights else POLL_QUESTION
             poll_id = await gateway.send_poll(question, list(options))
             if poll_id:
                 self.session.remember_poll(poll_id, options)
