@@ -90,7 +90,7 @@ class Dispatcher:
             except Exception as e:
                 logger.error(f"WhatsApp event failed: {type(e).__name__}: {e}", exc_info=True)
                 try:
-                    await gateway.send_text("⚠️ Something went wrong. Please try again.")
+                    await gateway.send_text("⚠️ משהו השתבש. נסה שוב.")
                 except Exception:
                     pass
             finally:
@@ -115,7 +115,7 @@ class Dispatcher:
         elif kind == "text":
             await self.text(ev.get("text") or "")
         elif kind in ("voice", "audio", "video", "document", "sticker"):
-            await gateway.send_text("I can read text and photos here. Send a meal photo or a command (help).")
+            await gateway.send_text("כאן אני קורא רק טקסט ותמונות. שלח תמונה של ארוחה או פקודה (עזרה).")
 
     async def text(self, text: str) -> None:
         if not text.strip():
@@ -150,7 +150,7 @@ class Dispatcher:
         data = self.session.callback_for(ev.get("poll_id", ""), selected[0])
         logger.info(f"WhatsApp vote → {data}")
         if data is None:
-            await gateway.send_text("⌛ That menu has expired. Please start again.")
+            await gateway.send_text("⌛ התפריט הזה כבר לא בתוקף — שלח את התמונה שוב.")
             return
         await self.callback(data)
 

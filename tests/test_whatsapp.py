@@ -129,7 +129,7 @@ def test_flow_photo_poll_vote_and_shortcut():
     run(d.handle({"type": "message", "id": "T2", "kind": "text", "text": "9 80"}))   # no item 9 → text
     run(d.handle({"type": "poll_vote", "poll_id": "OLD", "selected": ["x"]}))
     assert rec.calls == ["ok", "w:1:80", ("text", "9 80")]
-    assert rec.texts[-1].startswith("⌛")
+    assert rec.texts[-1].startswith("⌛ התפריט")
 
 
 def test_dedupe_and_auth():
