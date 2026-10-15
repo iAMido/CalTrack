@@ -193,3 +193,17 @@ See [CLAUDE.md](CLAUDE.md) for current architecture and design decisions, and
 [caltrack-architecture.md](caltrack-architecture.md) is the original design
 blueprint — useful for background, but superseded on several points (it predates
 the Hetzner move, the RunCoach exercise view, and the Strava removal).
+
+## WhatsApp (since 2026-10-15)
+
+CalTrack also answers in the WhatsApp group **CalTrack**, through TARS's
+`wa-gateway` on the same box. See `bot/whatsapp/__init__.py` and TARS's
+`docs/whatsapp-phase3-caltrack.md`.
+
+- **How it works:** the Telegram handlers run unchanged on Telegram-shaped
+  objects. Buttons become polls; type `1 150` to set item 1 to 150 g.
+  Commands work with or without `/`.
+- **Nudges and weekly reports** go to both Telegram and WhatsApp.
+- **On/off:** `WA_TOKEN` in `/etc/caltrack/caltrack.env` (off if unset).
+  CalTrack listens on `127.0.0.1:8093/wa/inbound`.
+- **Tests:** `docker compose run --rm --no-deps caltrack python tests/test_whatsapp.py`
