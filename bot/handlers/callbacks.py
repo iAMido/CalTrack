@@ -150,6 +150,7 @@ async def _handle_confirm_all(query, context) -> None:
         "total_fat_g": totals["total_fat_g"],
         "total_fiber_g": totals["total_fiber_g"],
         "ai_model_used": pending.get("ai_model"),
+        "notes": pending.get("notes"),
         "status": "confirmed",
     }
     meal = await db.upsert("meals", meal_row, on_conflict="id")

@@ -17,6 +17,7 @@ for k, v in {"TELEGRAM_BOT_TOKEN": "1:x", "TELEGRAM_ALLOWED_CHAT_ID": "555",
 from telegram import InlineKeyboardButton as B, InlineKeyboardMarkup as M  # noqa: E402
 
 from bot.whatsapp import cards, gateway, server, shim  # noqa: E402
+from bot.handlers.commands import handle_add as REAL_ADD  # noqa: E402
 
 
 class Rec:
@@ -255,6 +256,41 @@ def test_plain_text_is_food():
     d = server.Dispatcher()
     run(d.text("2 ביצים וטוסט"))
     assert got["args"] == ["2", "ביצים", "וטוסט"]
+
+
+def test_typed_meal_waits_for_confirm():
+    """Ido 2026-10-18: "מפרום, קוסקוס ומג'דרה" was saved at once, with no way to
+    fix or cancel. Now: the meal card + poll, nothing saved until ✅."""
+    rec = Rec()
+    rec.install()
+    import bot.handlers.commands as c
+
+    async def translate(t):
+        return t
+
+    async def analyze(t):
+        return [{"name_en": "mufrum", "name_he": "מפרום", "grams": 200, "calories_per_100g": 290,
+                 "protein_per_100g": 12, "carbs_per_100g": 10, "fat_per_100g": 22, "fiber_per_100g": 2}]
+
+    async def profile():
+        return {"id": "u1"}
+
+    async def pfood(name, fdc):
+        return {"id": "pf1"}
+
+    async def no_save(*a, **k):
+        raise AssertionError("saved before ✅")
+
+    c.translate, c._analyze_dish, c.db_queries.get_user_profile = translate, analyze, profile
+    c.pf.get_or_create_personal_food, c.db.upsert, c.db.insert = pfood, no_save, no_save
+    d = server.Dispatcher()
+    d.session.user_data.clear()
+    run(REAL_ADD(shim.WAUpdate(message=shim.WAMessage(d.outbox, text="מפרום")), d.ctx(["מפרום"])))
+    pending = d.session.user_data["pending_meal"]
+    assert pending["items"][0]["ingredient_name_he"] == "מפרום" and pending["items"][0]["calories"] == 580
+    assert "*מפרום* — 200 גר׳ · 580 קל׳" in rec.texts[-1]
+    q, opts = rec.polls[-1]
+    assert q == cards.POLL_QUESTION and cards.SAVE in opts and cards.CANCEL in opts and cards.GRAMS in opts
 
 
 def test_hebrew_command_words():
