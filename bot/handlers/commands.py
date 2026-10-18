@@ -298,7 +298,8 @@ async def handle_add(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
             ai_fallback = await nut_service.estimate_nutrition_text(food_name)
 
         nut = nut_service.calculate_nutrition(fdc_id, int(grams), ai_fallback)
-        items = [{"name": food_name, "grams": int(grams), "fdc_id": fdc_id, **nut}]
+        items = [{"name": food_name, "grams": int(grams), "fdc_id": fdc_id,
+                  "name_he": rest, "ai_fallback": ai_fallback, **nut}]
         total_cal = nut["calories"]
     else:
         # Freeform mode — AI breaks down the dish
@@ -334,7 +335,10 @@ async def handle_add(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
                     "fat_g": round(ing.get("fat_per_100g", 0) * factor, 1),
                     "fiber_g": round(ing.get("fiber_per_100g", 0) * factor, 1),
                 }
-                items.append({"name": ing["name_en"], "grams": grams, "fdc_id": None, **nut})
+                per100 = {k: ing.get(k) for k in ("calories_per_100g", "protein_per_100g",
+                                                  "carbs_per_100g", "fat_per_100g", "fiber_per_100g")}
+                items.append({"name": ing["name_en"], "grams": grams, "fdc_id": None,
+                              "name_he": ing.get("name_he") or "", "ai_fallback": per100, **nut})
             except Exception as e:
                 logger.warning(f"Skipping ingredient {ing}: {e}")
                 continue
@@ -344,6 +348,12 @@ async def handle_add(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
             return
 
         total_cal = sum(i["calories"] for i in items)
+
+    if getattr(context, "confirm_first", False):
+        # WhatsApp (Ido, 2026-10-18): a typed meal was saved with no chance to
+        # fix it. Now it's a pending meal with the same card + poll as a photo.
+        await _propose_meal(update, context, profile, meal_type, rest, items, bool(match))
+        return
 
     # Save to DB
     tz = pytz.timezone(config.user_timezone)
@@ -425,6 +435,35 @@ async def handle_add(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
         f"Today: *{cal_in:,} / {target:,} kcal* | Remaining: *{remaining:,} kcal*",
         parse_mode="Markdown",
     )
+
+
+async def _propose_meal(update, context, profile, meal_type, rest, items, precise) -> None:
+    """Typed meal → pending_meal (the photo flow's shape), saved on ✅."""
+    from bot.utils.formatters import build_meal_keyboard
+
+    pending_items = []
+    for i in items:
+        try:
+            pf_id = (await pf.get_or_create_personal_food(i["name"], i.get("fdc_id"))).get("id")
+        except Exception as e:
+            logger.warning(f"personal food for typed meal non-fatal: {e}")
+            pf_id = None
+        pending_items.append({
+            "ingredient_name": i["name"], "ingredient_name_he": i.get("name_he") or "",
+            "fdc_id": i.get("fdc_id"), "ai_fallback": i.get("ai_fallback"),
+            "weight_grams": i["grams"], "ai_estimated_grams": i["grams"],
+            "weight_source": "user_confirmed" if precise else "ai_estimate",
+            "auto_approved": False, "weight_suggestions": [i["grams"]],
+            "personal_food_id": pf_id,
+            **{k: i[k] for k in ("calories", "protein_g", "carbs_g", "fat_g", "fiber_g")},
+        })
+    context.user_data["pending_meal"] = {
+        "meal_id": str(uuid.uuid4()), "meal_type": meal_type, "photo_path": None,
+        "photo_file_id": None, "items": pending_items, "notes": rest,
+        "user_id": profile["id"], "ai_model": None if precise else "openai/gpt-4o-mini",
+    }
+    text, keyboard = build_meal_keyboard({"meal_type": meal_type, "items": pending_items}, {})
+    await update.message.reply_text(text, reply_markup=keyboard, parse_mode="Markdown")
 
 
 async def _analyze_dish(description: str) -> list[dict] | None:

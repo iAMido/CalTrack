@@ -187,3 +187,4 @@ class WAContext:
         self.user_data = session.user_data
         self.args = args or []
         self.bot = WABot(outbox)
+        self.confirm_first = True     # a typed meal gets the card + poll, not a direct save
