@@ -14,7 +14,7 @@ exists. Never spams. Each job is no-op if the meal is already logged.
 """
 
 import logging
-from telegram.ext import ContextTypes
+from bot.ui import ContextTypes
 from bot.utils.config import config
 from bot.db import queries as db_queries
 from bot.db import supabase_client as db

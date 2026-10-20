@@ -3,8 +3,8 @@ import uuid
 import logging
 from datetime import datetime
 import pytz
-from telegram import Update
-from telegram.ext import ContextTypes
+from bot.ui import Update
+from bot.ui import ContextTypes
 from bot.utils.config import config
 from bot.utils.formatters import build_meal_keyboard, detect_meal_type
 from bot.utils.image import resize_for_upload

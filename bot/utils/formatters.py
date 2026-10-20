@@ -1,5 +1,5 @@
 from datetime import datetime
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from bot.ui import InlineKeyboardButton, InlineKeyboardMarkup
 import pytz
 from bot.utils.config import config
 

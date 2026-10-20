@@ -1,8 +1,8 @@
 import logging
 from datetime import datetime
 import pytz
-from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
-from telegram.ext import ContextTypes
+from bot.ui import Update, InlineKeyboardMarkup, InlineKeyboardButton
+from bot.ui import ContextTypes
 from bot.utils.config import config
 from bot.services import nutrition as nut_service, personal_foods as pf
 from bot.services.translator import translate

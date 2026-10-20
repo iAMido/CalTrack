@@ -1,6 +1,6 @@
 import logging
-from telegram import Update
-from telegram.ext import ContextTypes
+from bot.ui import Update
+from bot.ui import ContextTypes
 from bot.utils.config import config
 from bot.services.calibration import recalibrate, format_calibration_message
 from bot.db import queries as db_queries

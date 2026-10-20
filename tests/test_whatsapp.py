@@ -17,7 +17,7 @@ for k, v in {"TELEGRAM_BOT_TOKEN": "1:x", "TELEGRAM_ALLOWED_CHAT_ID": "555",
     # This process only ever talks to the fakes below.
     os.environ[k] = v
 
-from telegram import InlineKeyboardButton as B, InlineKeyboardMarkup as M  # noqa: E402
+from bot.ui import InlineKeyboardButton as B, InlineKeyboardMarkup as M  # noqa: E402
 
 from bot.whatsapp import cards, gateway, server, shim  # noqa: E402
 from bot.handlers.commands import handle_add as REAL_ADD  # noqa: E402
