@@ -150,6 +150,12 @@ async def post_init(application: Application) -> None:
 
 
 def main() -> None:
+    if not config.telegram_enabled:
+        # WhatsApp-only: no Telegram Application at all (bot/runner.py).
+        from bot.runner import run_whatsapp_only
+
+        asyncio.run(run_whatsapp_only())
+        return
     app = (
         Application.builder()
         .token(config.telegram_bot_token)
@@ -189,38 +195,8 @@ def main() -> None:
     # Inline keyboard callbacks
     app.add_handler(CallbackQueryHandler(handle_callback))
 
-    if not config.telegram_enabled:
-        asyncio.run(run_without_telegram(app))
-        return
     logger.info(f"Starting CalTrack bot (chat_id: {config.telegram_allowed_chat_id})")
     app.run_polling(drop_pending_updates=True)
-
-
-async def run_without_telegram(app: Application) -> None:
-    """WhatsApp only (TELEGRAM_ENABLED=false): the same post_init (caches, the
-    job queue with nudges and weekly reports, the WhatsApp listener), but no
-    Telegram polling — run_polling is what would start the updater."""
-    import signal
-
-    stop = asyncio.Event()
-    loop = asyncio.get_running_loop()
-    for sig in (signal.SIGTERM, signal.SIGINT):
-        try:
-            loop.add_signal_handler(sig, stop.set)
-        except NotImplementedError:      # Windows dev box
-            pass
-    await app.initialize()
-    await post_init(app)
-    await app.start()
-    logger.info("CalTrack running WhatsApp-only (TELEGRAM_ENABLED=false): no Telegram polling.")
-    try:
-        await stop.wait()
-    finally:
-        runner = app.bot_data.get("wa_runner")
-        if runner is not None:
-            await runner.cleanup()
-        await app.stop()
-        await app.shutdown()
 
 
 if __name__ == "__main__":
