@@ -4,7 +4,9 @@
 Starts the real WhatsApp listener on a private port with a FAKE gateway that
 captures every /send and /poll, then posts real-shaped events (Hebrew
 commands, a typed meal → card + poll, ❌ cancel, a voice note). Reads the real
-database (summary, status…); never saves: the meal is cancelled.
+database (summary, status…); never saves: the meal is cancelled, the
+"learned food" cache write is stubbed, and the weekly coach report ("שבוע")
+is NOT run — it saves a coach_reports row (20/10: the first run did; deleted).
 
   docker run --rm --network host --env-file /etc/caltrack/caltrack.env \\
       -v <checkout>:/app -w /app caltrack-caltrack:latest python scripts/wa_smoke.py [baseline.json]
@@ -57,9 +59,12 @@ async def fake_gateway() -> web.AppRunner:
     return runner
 
 
+_DAYS = re.compile(r"ראשון|שני|שלישי|רביעי|חמישי|שישי|שבת")
+
+
 def shape(items: list) -> list:
-    """Stable across days: kind + the first words, digits masked."""
-    return [[k, re.sub(r"\d", "#", " ".join(t.split())[:24]), len(o)] for k, t, o in items]
+    """Stable across days: kind + the first words, digits and weekdays masked."""
+    return [[k, _DAYS.sub("D", re.sub(r"\d", "#", " ".join(t.split())[:24])), len(o)] for k, t, o in items]
 
 
 async def settle(n0: int, quiet: float = 4.0, limit: float = 90.0) -> list:
@@ -74,8 +79,14 @@ async def settle(n0: int, quiet: float = 4.0, limit: float = 90.0) -> list:
 
 
 async def main() -> int:
+    from bot.services import personal_foods as pf
     from bot.utils.config import config
     from bot.whatsapp import server
+
+    async def no_pf_write(name, fdc_id):          # the smoke test never writes
+        return {"id": None, "ingredient_name": name}
+
+    pf.get_or_create_personal_food = no_pf_write
 
     gw = await fake_gateway()
     runner = await server.start()
@@ -89,7 +100,6 @@ async def main() -> int:
         ("summary", {"kind": "text", "text": "סיכום"}),
         ("status", {"kind": "text", "text": "מצב"}),
         ("history", {"kind": "text", "text": "היסטוריה"}),
-        ("week", {"kind": "text", "text": "שבוע"}),
         ("typed_meal", {"kind": "text", "text": "2 ביצים וטוסט"}),
         ("cancel", None),                     # ❌ on the meal poll
         ("voice", {"kind": "voice", "text": ""}),
