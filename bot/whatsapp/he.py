@@ -79,6 +79,15 @@ EXACT = {
     "⚠️ No profile found.": "⚠️ לא נמצא פרופיל.",
     "⚠️ No user profile found.": "⚠️ לא נמצא פרופיל.",
     "📋 *Your Meal Templates*\nTap to log instantly:": "📋 *התבניות שלך*\nבחר בסקר כדי לרשום:",
+    # /barcode, /label (deep QA 2026-10-20: these were still English)
+    "📷 Send me a clear photo of the product barcode (EAN/UPC).": "📷 שלח תמונה ברורה של הברקוד של המוצר.",
+    "📷 Send a photo of the nutrition label and I'll extract the macros.\nMake sure the *per 100g* column is clearly visible.":
+        "📷 שלח תמונה של תווית הערכים התזונתיים, ואחלץ ממנה את הערכים.\nשהעמודה *ל-100 גרם* תהיה ברורה.",
+    "🔍 Decoding barcode…": "🔍 מפענח את הברקוד…",
+    "🔍 Reading the nutrition label...": "🔍 קורא את התווית…",
+    "⚠️ Session expired. Please scan again.": "⚠️ פג תוקף. סרוק שוב.",
+    "Session expired. Please send the photo again.": "⌛ פג תוקף. שלח את התמונה שוב.",
+    "Please type the food name.": "כתוב את שם המאכל.",
     # Button labels (poll options)
     "✅ Yes, undo it": "✅ כן, לבטל", "❌ Keep it": "❌ להשאיר", "❌ Cancel": "❌ ביטול",
 }
@@ -158,6 +167,24 @@ RULES: list[tuple[str, object]] = [
     (r'^❌ No template matching "(.+)"\.', r'❌ אין תבנית בשם "\1".'),
     (r"^📋 No templates saved yet\.[\s\S]*", "📋 עוד אין תבניות. אפשר לשמור תבנית בדשבורד: הוספת ארוחה ← שמירה כתבנית."),
     (r"^❌ Failed to save: (.*)", r"❌ השמירה נכשלה: \1"),
+    # /barcode, /label with values
+    (r"^❌ Could not read a barcode from that photo\.\n[\s\S]*",
+     "❌ לא הצלחתי לקרוא ברקוד מהתמונה. נסה תמונה חדה ומוארת, או כתוב את המספר: `ברקוד 5000112545747`"),
+    (r"^🔎 Looking up barcode `(\d+)`…", r"🔎 מחפש את הברקוד `\1`…"),
+    (r"^❌ Product `(\d+)` not found in Open Food Facts database\.[\s\S]*", r"❌ המוצר `\1` לא נמצא במאגר Open Food Facts."),
+    (r"^⚠️ Found \*(.+)\* but it has no calorie data\.", r"⚠️ מצאתי *\1* אבל אין לו נתוני קלוריות."),
+    (r"^Per 100 g: \*([\d.]+) kcal\* \| P ([\d.]+)g · C ([\d.]+)g · F ([\d.]+)g · Fib ([\d.]+)g",
+     r"ל-100 גרם: *\1 קל׳* · חלבון \2 · פחמ׳ \3 · שומן \4 · סיבים \5"),
+    (r"How many grams did you eat\?", "כמה גרם אכלת?"),
+    (r"^✅ Logged \*(.+)\* \((\d+) g\) — \*(\d+) kcal\*", r"✅ נרשם *\1* (\2 גר׳) — *\3 קל׳*"),
+    (r"^❌ Could not read the label\.[\s\S]*", "❌ לא הצלחתי לקרוא את התווית. ודא שהטבלה ברורה ונסה שוב (`תווית`)."),
+    (r"^Format not recognised\. Try: `chicken breast, 150`", "לא הבנתי. כתוב שם וכמות, למשל: `חזה עוף, 150`"),
+    (r"^Please enter a valid number of grams, e\.g\. `150`", "כתוב מספר גרמים, למשל `150`"),
+    # /stats
+    (r"^🔧 \*System Stats\*", "🔧 *נתוני מערכת*"),
+    (r"^🎯 Target: ([\d.]+) kg", r"🎯 יעד: \1 ק״ג"),
+    (r"^🍽 Daily target: (\d+) kcal", r"🍽️ יעד יומי: \1 קל׳"),
+    (r"^📅 Last calibration: (.+)$", r"📅 כיול אחרון: \1"),
     # Calibration (bot/services/calibration.py)
     (r"📊 \*Calibration updated\* \((.*?)\)", "📊 *הכיול עודכן*"),
     (r"⚖️ Weight used: \*([\d.]+) kg\* \(7-day avg\)", r"⚖️ משקל בחישוב: *\1 ק״ג* (ממוצע 7 ימים)"),

@@ -122,6 +122,19 @@ class Dispatcher:
             return
         ud = self.session.user_data
         cmds = commands()
+        if ud.get("waiting_for") == "barcode" or ud.get("awaiting_label_photo"):
+            # Waiting for a PHOTO (barcode / nutrition label). A command still
+            # works and ends the wait; anything else gets a reminder instead of
+            # being swallowed (deep QA 2026-10-20: "מצב" got no answer).
+            head = text.strip().split()[0].lstrip("/").split("@", 1)[0].lower()
+            if head in cmds:
+                if ud.get("waiting_for") == "barcode":
+                    ud.pop("waiting_for", None)
+                ud.pop("awaiting_label_photo", None)
+            else:
+                what = "הברקוד" if ud.get("waiting_for") == "barcode" else "תווית התזונה"
+                await gateway.send_text(f"📷 מחכה לתמונה של {what}. שלח תמונה, או כתוב פקודה אחרת (למשל מצב).")
+                return
         parsed = parse_command(text, ud, cmds)
         if parsed:
             name, args = parsed
