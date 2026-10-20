@@ -302,6 +302,49 @@ def test_hebrew_command_words():
     assert names["סיכום"] is names["s"] and names["מים"] is names["water"]
 
 
+def test_runner_schedules_the_same_jobs_without_telegram():
+    """bot/runner.py (20/10): the PTB JobQueue's jobs, same times, own scheduler."""
+    from bot.runner import build_scheduler
+
+    sched = build_scheduler()
+    jobs = {j.id: str(j.trigger) for j in sched.get_jobs()}
+    assert set(jobs) == {"nudge_breakfast", "nudge_lunch", "nudge_dinner", "weekly_calibration", "weekly_coach"}
+    assert "hour='11'" in jobs["nudge_breakfast"] and "minute='30'" in jobs["nudge_dinner"]
+    assert "day_of_week='sun'" in jobs["weekly_calibration"] and "hour='20'" in jobs["weekly_calibration"]
+    assert "day_of_week='sat'" in jobs["weekly_coach"] and "hour='22'" in jobs["weekly_coach"]
+
+
+def test_nudge_with_telegram_off_goes_to_whatsapp_only():
+    import bot.services.nudge as n
+    from bot.utils.config import config
+
+    sent = []
+
+    async def profile():
+        return {"id": "u1"}
+
+    async def today_types(uid):
+        return []
+
+    async def hints(uid):
+        return ""
+
+    async def notify(text):
+        sent.append(text)
+
+    old = config.telegram_enabled
+    config.telegram_enabled = False
+    n.db_queries.get_user_profile, n.db_queries.get_today_meal_types = profile, today_types
+    n._build_template_hints = hints
+    import bot.whatsapp.gateway as g
+    g.notify = notify
+    try:
+        run(n.nudge_breakfast(None))          # context=None, as bot/runner.py calls it
+    finally:
+        config.telegram_enabled = old
+    assert len(sent) == 1
+
+
 if __name__ == "__main__":
     fails = 0
     for name, fn in list(globals().items()):
