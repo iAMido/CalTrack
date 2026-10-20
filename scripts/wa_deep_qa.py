@@ -172,10 +172,15 @@ async def fake_gateway() -> web.AppRunner:
     return runner
 
 
-async def settle(n0: int, quiet: float = 5.0, limit: float = 150.0) -> list:
+async def settle(n0: int, quiet: float = 5.0, limit: float = 150.0, until_poll: bool = False) -> list:
+    """Wait until the replies stop (quiet seconds of silence). until_poll: keep
+    waiting until a poll arrives (the photo AI can be silent for 20 s+ after
+    "מנתח את הארוחה…"; deep QA 2026-10-20 misread that as a failure)."""
     t0, last_n, last_t = time.time(), len(out), time.time()
     while time.time() - t0 < limit:
         await asyncio.sleep(0.5)
+        if until_poll and not any(k == "poll" for k, _t, _o in out[n0:]):
+            continue
         if len(out) != last_n:
             last_n, last_t = len(out), time.time()
         elif len(out) > n0 and time.time() - last_t >= quiet:
@@ -200,7 +205,8 @@ class Driver:
                 return f"P{j + 1}", out[j][2]
         return None, []
 
-    async def step(self, name: str, *, text=None, kind="text", vote=None, check=None, quiet=5.0, raw=None, mid=None):
+    async def step(self, name: str, *, text=None, kind="text", vote=None, check=None, quiet=5.0, raw=None, mid=None,
+                   until_poll=False):
         self.i += 1
         n0, w0 = len(out), len(writes)
         if raw is not None:
@@ -220,7 +226,7 @@ class Driver:
             if kind == "image":
                 ev["has_media"] = True
             code = await self.post(ev)
-        got = await settle(n0, quiet=quiet) if code == 200 else []
+        got = await settle(n0, quiet=quiet, limit=120.0 if until_poll else 150.0, until_poll=until_poll) if code == 200 else []
         new_w = writes[w0:]
         msgs = [{"k": k, "t": t, "o": o} for k, t, o in got]
         ok = True
@@ -344,7 +350,7 @@ async def main() -> int:
             await S("undo_yes", vote=yes, check=lambda m, w, c: (any(x["op"] == "delete" or x["table"] == "meals" for x in w), "no delete captured"))
         # --- photo flow (real photo, vision LLM; upload + save captured)
         if PHOTO["bytes"]:
-            await S("photo", kind="image", text="", quiet=8.0,
+            await S("photo", kind="image", text="", quiet=5.0, until_poll=True,
                     check=lambda m, w, c: (any(x["k"] == "poll" for x in m) and any(x["table"].startswith("storage:") for x in w),
                                            "no card/poll or no (captured) upload"))
             await S("photo_save", vote="שמור", check=lambda m, w, c: (any(x["table"] == "meals" for x in w), "no meals write"))
