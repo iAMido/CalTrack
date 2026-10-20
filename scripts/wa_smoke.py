@@ -59,7 +59,7 @@ async def fake_gateway() -> web.AppRunner:
     return runner
 
 
-_DAYS = re.compile(r"ראשון|שני|שלישי|רביעי|חמישי|שישי|שבת")
+_DAYS = re.compile(r"ראשון|שני|שלישי|רביעי|חמישי|שישי|שבת|☀️|🌤️|🌙|🍪|ארוחת בוקר|ארוחת צהריים|ארוחת ערב|נשנוש")
 
 
 def shape(items: list) -> list:
