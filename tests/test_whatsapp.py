@@ -406,6 +406,15 @@ def test_markdown_report_becomes_whatsapp():
     assert gateway.to_whatsapp("*כבר* תקין · [קישור](https://a.b/c)") == "*כבר* תקין · קישור (https://a.b/c)"
 
 
+def test_coach_report_has_room_to_finish():
+    """Every saved weekly report ended mid-sentence at ~4,950 chars (max_tokens 3500)."""
+    import inspect
+
+    from bot.services import coach
+    src = inspect.getsource(coach)
+    assert '"max_tokens": 9000' in src and 'finish_reason") == "length"' in src
+
+
 if __name__ == "__main__":
     fails = 0
     for name, fn in list(globals().items()):
