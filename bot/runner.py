@@ -9,8 +9,8 @@ aiohttp WhatsApp server. No Telegram token is used.
 
 Same jobs, same times (PTB counted Sunday as day 0):
   nudges 11:00 / 14:00 / 19:30 daily · calibration Sun 20:00 · coach Sat 22:00
-The jobs take a `context` (PTB style); here it's None. They only touch
-context.bot when TELEGRAM_ENABLED is true, which is never the case on this path.
+The jobs take an unused `context` argument (from the PTB days); here it is None.
+
 """
 
 import asyncio
@@ -83,7 +83,7 @@ async def run_whatsapp_only() -> None:
         runner = await wa_server.start()
     except Exception as e:
         logger.error(f"WhatsApp listener failed to start: {type(e).__name__}: {e}")
-    logger.info("CalTrack running WhatsApp-only, no Telegram app (TELEGRAM_ENABLED=false).")
+    logger.info("CalTrack running (WhatsApp only).")
     try:
         await stop.wait()
     finally:

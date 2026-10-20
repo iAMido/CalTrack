@@ -3,6 +3,9 @@ from pydantic import field_validator
 import os
 
 
+OWNER_CHAT_ID = 1
+
+
 class Config(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -15,13 +18,8 @@ class Config(BaseSettings):
         extra="ignore",
     )
 
-    # Telegram
-    telegram_bot_token: str
-    telegram_allowed_chat_id: int
-    # Ido 2026-10-20: "I am only on WhatsApp". False = no Telegram polling and no
-    # Telegram copies of nudges/reports; the scheduler + WhatsApp keep running.
-    # The token stays: PTB's Application still needs a valid one to start.
-    telegram_enabled: bool = True
+    # Telegram was removed 2026-10-20 (WhatsApp only). Old TELEGRAM_* lines in the
+    # env file are ignored (extra="ignore").
 
     # WhatsApp (via TARS's wa-gateway on the same box; bot/whatsapp/).
     # Off unless WA_TOKEN is set. The gateway routes the "CalTrack" group here.
@@ -49,7 +47,10 @@ class Config(BaseSettings):
 
     @property
     def allowed_chat_ids(self) -> set[int]:
-        return {self.telegram_allowed_chat_id}
+        # The handlers' old per-chat check. The WhatsApp adapter presents every
+        # message as chat OWNER_CHAT_ID; who may write is decided by the gateway
+        # (the CalTrack group, Ido only), not here.
+        return {OWNER_CHAT_ID}
 
     @property
     def wa_enabled(self) -> bool:

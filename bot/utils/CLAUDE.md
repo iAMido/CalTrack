@@ -7,14 +7,13 @@ Stateless helper modules used across handlers, services, and scripts.
 | File | Purpose |
 |------|---------|
 | `config.py` | pydantic-settings BaseSettings — loads all `.env` vars, typed access via `config.*` |
-| `formatters.py` | Builds meal confirmation keyboard and all Telegram message text |
+| `formatters.py` | Builds the meal keyboard (bot/ui.py buttons → WhatsApp polls) and message text |
 | `met_calculator.py` | MET-based calorie burn for runs when device data unavailable |
 
 ## config.py — Key Fields
 ```python
-config.telegram_bot_token
-config.telegram_allowed_chat_id
-config.allowed_chat_ids           # set with single chat_id
+config.allowed_chat_ids           # {OWNER_CHAT_ID}: the WhatsApp adapter's fixed chat id (Telegram removed 2026-10-20)
+config.wa_token / wa_gateway_url  # WhatsApp via TARS's wa-gateway
 config.openrouter_api_key
 config.openrouter_vision_model    # "openai/gpt-4o"
 config.openrouter_coach_model     # "anthropic/claude-sonnet-4-5"
