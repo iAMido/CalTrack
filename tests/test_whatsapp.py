@@ -103,7 +103,9 @@ def test_flow_photo_poll_vote_and_shortcut():
     async def fake_photo(update, context):
         data = await (await update.message.photo[-1].get_file()).download_as_bytearray()
         seen["photo"] = bytes(data)
-        assert update.effective_chat.id == 555
+        # The handlers' access check must pass for the adapter's chat (was the Telegram chat 555).
+        from bot.utils.config import OWNER_CHAT_ID, config
+        assert update.effective_chat.id == OWNER_CHAT_ID and update.effective_chat.id in config.allowed_chat_ids
         context.user_data["pending_meal"] = {"items": [{"weight_grams": 100}, {"weight_grams": 50}]}
         await update.message.reply_text("🍽 *Lunch*", reply_markup=meal_markup(2), parse_mode="Markdown")
 
@@ -314,9 +316,8 @@ def test_runner_schedules_the_same_jobs_without_telegram():
     assert "day_of_week='sat'" in jobs["weekly_coach"] and "hour='22'" in jobs["weekly_coach"]
 
 
-def test_nudge_with_telegram_off_goes_to_whatsapp_only():
+def test_nudge_goes_to_whatsapp():
     import bot.services.nudge as n
-    from bot.utils.config import config
 
     sent = []
 
@@ -332,17 +333,23 @@ def test_nudge_with_telegram_off_goes_to_whatsapp_only():
     async def notify(text):
         sent.append(text)
 
-    old = config.telegram_enabled
-    config.telegram_enabled = False
     n.db_queries.get_user_profile, n.db_queries.get_today_meal_types = profile, today_types
     n._build_template_hints = hints
     import bot.whatsapp.gateway as g
     g.notify = notify
-    try:
-        run(n.nudge_breakfast(None))          # context=None, as bot/runner.py calls it
-    finally:
-        config.telegram_enabled = old
+    run(n.nudge_breakfast(None))              # context=None, as bot/runner.py calls it
     assert len(sent) == 1
+
+
+def test_no_telegram_left():
+    """2026-10-20: python-telegram-bot is gone; nothing may import it again."""
+    import sys
+
+    import bot.main  # noqa: F401
+    import bot.runner  # noqa: F401
+    from bot.whatsapp import server
+    server.commands()
+    assert not any(m == "telegram" or m.startswith("telegram.") for m in sys.modules)
 
 
 if __name__ == "__main__":

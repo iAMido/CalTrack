@@ -16,7 +16,7 @@ from itertools import count
 
 import pytz
 
-from bot.utils.config import config
+from bot.utils.config import OWNER_CHAT_ID, config
 from bot.whatsapp import cards, gateway
 from bot.whatsapp.he import he_text
 
@@ -116,7 +116,7 @@ class WAChat:
     type = "private"
 
     def __init__(self) -> None:
-        self.id = config.telegram_allowed_chat_id
+        self.id = OWNER_CHAT_ID
 
 
 class WAFile:
