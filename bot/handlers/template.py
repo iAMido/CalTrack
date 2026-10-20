@@ -2,8 +2,8 @@ import logging
 import uuid
 from datetime import datetime
 import pytz
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ContextTypes
+from bot.ui import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from bot.ui import ContextTypes
 from bot.utils.config import config
 from bot.utils.formatters import detect_meal_type
 from bot.services import personal_foods as pf

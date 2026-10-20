@@ -1,7 +1,7 @@
 import logging
 import uuid
-from telegram import Update
-from telegram.ext import ContextTypes
+from bot.ui import Update
+from bot.ui import ContextTypes
 from bot.utils.config import config
 from bot.utils.image import resize_for_upload
 from bot.services import vision
