@@ -6,7 +6,10 @@
 > coach Sat 22:00) and the listener. `python-telegram-bot` is removed (CalTrack #18–#21); the handlers
 > use `bot/ui.py` for buttons, which `bot/whatsapp/shim.py` turns into WhatsApp polls.
 > Anything below that says Telegram, `/commands` via BotFather, `TELEGRAM_*` or polling is **history**.
-> Smoke test after any change: `scripts/wa_smoke.py` (fake gateway, never writes).
+> QA after any change (run in the image on the VPS, nothing is sent and nothing is written):
+> `scripts/wa_smoke.py` (quick, vs a baseline) · `scripts/wa_deep_qa.py` (every command and flow, every DB write
+> intercepted and listed) · `scripts/db_fingerprint.py` before/after (proves the real DB is unchanged).
+> **Never send `שבוע` or save a meal through a raw test**: those write (coach_reports, personal_foods).
 
 
 A single-user, privacy-first calorie tracker. Photograph meals in a WhatsApp group → AI identifies the food → confirm weights → calories and macros are logged automatically. Weekly AI coaching reports in Hebrew.

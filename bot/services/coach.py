@@ -471,7 +471,10 @@ Analyze this week and produce your full report in Hebrew.
                         {"role": "user", "content": user_prompt},
                     ],
                     "temperature": 0.3,
-                    "max_tokens": 3500,
+                    # 2026-10-20 deep QA: every saved report since September was
+                    # ~4,950 chars and ended mid-sentence ("חטיף (10") — Hebrew
+                    # used up 3,500 tokens before the end. Room for the whole report.
+                    "max_tokens": 9000,
                 },
             )
             response.raise_for_status()
@@ -479,7 +482,10 @@ Analyze this week and produce your full report in Hebrew.
         logger.error(f"AI Coach API error: {e}")
         return "❌ שגיאה ביצירת הדוח השבועי. נסה שוב מאוחר יותר."
 
-    report_text = response.json()["choices"][0]["message"]["content"]
+    choice = response.json()["choices"][0]
+    report_text = choice["message"]["content"]
+    if choice.get("finish_reason") == "length":
+        logger.warning("AI Coach report was cut by max_tokens (%d chars) — raise the limit", len(report_text or ""))
 
     # Persist report to DB for dashboard history
     try:
