@@ -238,7 +238,7 @@ class Driver:
         tag = "PASS" if ok else "FAIL"
         summary = " | ".join(f"{m['k']}:{' '.join(m['t'].split())[:80]}" for m in msgs) or "(no reply)"
         wsum = ", ".join(f"{w['op']} {w['table']}" for w in new_w)
-        print(f"{tag} {name}: HTTP {code} → {summary}" + (f"  [writes: {wsum}]" if wsum else "") + (f"  ← {why}" if why else ""), flush=True)
+        print(f"{tag} {name}: HTTP {code} → {summary}" + (f"  [writes: {wsum}]" if wsum else "") + (f"  ← {why}" if why and not ok else ""), flush=True)
         if not ok:
             self.failures.append(f"{name}: {why}")
         return msgs
@@ -322,7 +322,7 @@ async def main() -> int:
         await S("grams_answer", text="1 150", check=lambda m, w, c: (any("150" in x["t"] for x in m), "card not updated to 150"))
         await S("vote_save", vote="שמור", check=lambda m, w, c: (any(x["table"] == "meals" for x in w) and any(x["table"] == "meal_items" for x in w)
                                                                   and any("נשמר" in x["t"] for x in m), "no meals+meal_items write or no 'נשמר'"))
-        await S("stale_vote", vote="שמור", check=has("כבר לא בתוקף"))
+        await S("stale_vote", vote="שמור", check=lambda m, w, c: (any("כבר לא" in x["t"] for x in m) and not w, "no 'no longer open' reply, or it wrote"))
         # --- single item: 🔄 rename, ➕ add, ❌ cancel
         await S("typed_single", text="חזה עוף 150 גרם", check=lambda m, w, c: (any(x["k"] == "poll" for x in m), "no poll"))
         await S("vote_rename", vote="זה לא", check=heb)
