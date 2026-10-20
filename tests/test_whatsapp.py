@@ -103,7 +103,9 @@ def test_flow_photo_poll_vote_and_shortcut():
     async def fake_photo(update, context):
         data = await (await update.message.photo[-1].get_file()).download_as_bytearray()
         seen["photo"] = bytes(data)
-        assert update.effective_chat.id == 555
+        # The handlers' access check must pass for the adapter's chat (was the Telegram chat 555).
+        from bot.utils.config import OWNER_CHAT_ID, config
+        assert update.effective_chat.id == OWNER_CHAT_ID and update.effective_chat.id in config.allowed_chat_ids
         context.user_data["pending_meal"] = {"items": [{"weight_grams": 100}, {"weight_grams": 50}]}
         await update.message.reply_text("🍽 *Lunch*", reply_markup=meal_markup(2), parse_mode="Markdown")
 
