@@ -18,6 +18,10 @@ class Config(BaseSettings):
     # Telegram
     telegram_bot_token: str
     telegram_allowed_chat_id: int
+    # Ido 2026-10-20: "I am only on WhatsApp". False = no Telegram polling and no
+    # Telegram copies of nudges/reports; the scheduler + WhatsApp keep running.
+    # The token stays: PTB's Application still needs a valid one to start.
+    telegram_enabled: bool = True
 
     # WhatsApp (via TARS's wa-gateway on the same box; bot/whatsapp/).
     # Off unless WA_TOKEN is set. The gateway routes the "CalTrack" group here.
