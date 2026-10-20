@@ -1,7 +1,7 @@
 # bot/services/ — Business Logic
 
 ## What This Is
-Pure Python business logic, independent of Telegram. Each service is a module of async functions called from handlers.
+Pure Python business logic, independent of the chat transport. Each service is a module of async functions called from handlers.
 
 ## Files & Status
 | File | Responsibility | Status |

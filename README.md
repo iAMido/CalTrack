@@ -1,10 +1,19 @@
 # CalTrack
 
-A single-user, privacy-first calorie tracker. Photograph meals via Telegram → AI identifies the food → confirm weights → calories and macros are logged automatically. Weekly AI coaching reports in Hebrew.
+> **Current truth (2026-10-20): CalTrack is WhatsApp-only. There is no Telegram bot any more.**
+> Ido logs meals in the WhatsApp group "CalTrack". TARS's wa-gateway posts it to `bot/whatsapp/server.py`
+> (127.0.0.1:8093). `bot/runner.py` runs the scheduler (nudges 11:00/14:00/19:30, calibration Sun 20:00,
+> coach Sat 22:00) and the listener. `python-telegram-bot` is removed (CalTrack #18–#21); the handlers
+> use `bot/ui.py` for buttons, which `bot/whatsapp/shim.py` turns into WhatsApp polls.
+> Anything below that says Telegram, `/commands` via BotFather, `TELEGRAM_*` or polling is **history**.
+> Smoke test after any change: `scripts/wa_smoke.py` (fake gateway, never writes).
+
+
+A single-user, privacy-first calorie tracker. Photograph meals in a WhatsApp group → AI identifies the food → confirm weights → calories and macros are logged automatically. Weekly AI coaching reports in Hebrew.
 
 ## How It Works
 
-1. Send a meal photo to the Telegram bot
+1. Send a meal photo in the WhatsApp group "CalTrack"
 2. The bot uses vision AI (GPT-4o) to identify food items and estimate weights
 3. Confirm or correct each item via inline keyboard buttons
 4. The system logs nutrition data and shows remaining calories for the day
@@ -78,8 +87,8 @@ restic backup job run as the `tars` user and must be able to read it.
 
 | Variable | Purpose |
 |----------|---------|
-| `TELEGRAM_BOT_TOKEN` | Bot token from @BotFather |
-| `TELEGRAM_ALLOWED_CHAT_ID` | Your Telegram user ID |
+| ~~`TELEGRAM_BOT_TOKEN`~~ / ~~`TELEGRAM_ALLOWED_CHAT_ID`~~ | Removed 2026-10-20 (WhatsApp only) |
+| `WA_TOKEN` | Shared secret with TARS's wa-gateway |
 | `OPENROUTER_API_KEY` | OpenRouter API key |
 | `OPENROUTER_VISION_MODEL` | e.g. `openai/gpt-4o` |
 | `OPENROUTER_COACH_MODEL` | e.g. `anthropic/claude-sonnet-4-5` |
@@ -137,7 +146,7 @@ python -m bot.main
 
 ```
 caltrack/
-├── bot/                # Telegram bot — the whole application
+├── bot/                # the whole application (WhatsApp only)
 │   ├── handlers/       # photo, commands, callbacks, admin, label, barcode, template
 │   ├── services/       # vision, nutrition, barcode, coach, calibration,
 │   │                   # translator, personal_foods, daily_summary, nudge
@@ -166,13 +175,13 @@ caltrack/
 
 - **Secrets**: All API keys and tokens are in `.env` locally and in
   `/etc/caltrack/caltrack.env` (`root:tars 0640`) in production. Neither is committed to git.
-- **Telegram**: Every incoming message is checked against `TELEGRAM_ALLOWED_CHAT_ID`. Unauthorized users get no response.
+- **WhatsApp**: only the "CalTrack" group (Ido only), filtered by TARS's gateway; the endpoint requires the bearer `WA_TOKEN`.
 - **Supabase**: Uses `service_role` key (kept private). Photos stored in a private storage bucket with no public URLs.
 - **Network**: The VPS firewall denies all inbound traffic except SSH and the
   tailnet. The bot long-polls outbound only and publishes no ports — never add a
   `ports:` block to `docker-compose.yml`, as Docker's iptables rules bypass UFW.
-- **Log hygiene**: `httpx` logging is pinned to `WARNING` in `bot/main.py`. Telegram
-  embeds the bot token in the request URL, and `httpx` logs full URLs at `INFO` —
+- **Log hygiene**: `httpx` logging is pinned to `WARNING` in `bot/main.py` (originally because Telegram
+  embedded the bot token in the request URL; Supabase URLs go through it too), and `httpx` logs full URLs at `INFO` —
   which would write the token to disk in cleartext every few seconds.
 
 ---
@@ -200,10 +209,10 @@ CalTrack also answers in the WhatsApp group **CalTrack**, through TARS's
 `wa-gateway` on the same box. See `bot/whatsapp/__init__.py` and TARS's
 `docs/whatsapp-phase3-caltrack.md`.
 
-- **How it works:** the Telegram handlers run unchanged on Telegram-shaped
-  objects. Buttons become polls; type `1 150` to set item 1 to 150 g.
+- **How it works:** the feature handlers (written for Telegram) run unchanged on
+  Telegram-shaped objects from `bot/whatsapp/shim.py`; buttons come from `bot/ui.py`. Buttons become polls; type `1 150` to set item 1 to 150 g.
   Commands work with or without `/`.
-- **Nudges and weekly reports** go to both Telegram and WhatsApp.
+- **Nudges and weekly reports** go to WhatsApp (Telegram removed 2026-10-20).
 - **On/off:** `WA_TOKEN` in `/etc/caltrack/caltrack.env` (off if unset).
   CalTrack listens on `127.0.0.1:8093/wa/inbound`.
 - **Tests:** `docker compose run --rm --no-deps caltrack python tests/test_whatsapp.py`
