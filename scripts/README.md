@@ -39,3 +39,12 @@ Download from the official USDA FoodData Central:
 - SR Legacy: https://fdc.nal.usda.gov/download-datasets (sr_legacy_food.json)
 
 Place files in `data/` (gitignored). The import script auto-detects which files are present.
+
+## QA scripts (2026-10-20), run in the CalTrack image on the VPS
+| Script | What it does |
+|---|---|
+| `wa_smoke.py [baseline.json]` | 7 WhatsApp steps through a fake gateway (help, summary, status, history, typed meal → ❌, voice). With a baseline: exits 1 on a different shape. Never writes. |
+| `wa_deep_qa.py [--json out.json]` | ~53 steps: every command and flow, photo with a real image, all scheduled jobs. **Every DB write is intercepted and listed, never executed.** `--json` saves a transcript for an A/B diff. |
+| `db_fingerprint.py` | Row count + md5 of 14 tables. Run before and after any QA; identical = nothing was written. |
+
+How to run, and what they found: `docs/QA-2026-10-20.md`. Not one-time setup scripts. Unlike the others above, these are run after every change.

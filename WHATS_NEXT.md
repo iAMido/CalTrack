@@ -1,5 +1,17 @@
 # CalTrack — What's Next
 
+## Recently Completed (2026-10-20): WhatsApp only
+- **Telegram removed** (#17–#21): CalTrack runs only in the WhatsApp group "CalTrack". `bot/runner.py` = scheduler + listener; `bot/ui.py` replaced python-telegram-bot.
+- **Deep QA** (#23–#24, `docs/QA-2026-10-20.md`): every flow tested with all DB writes intercepted; old vs new code identical. Fixed:
+  - the coach report was cut mid-sentence every week (max_tokens 3500 → 9000);
+  - commands were swallowed after `ברקוד`/`תווית`;
+  - English item names after rename/add;
+  - barcode/label/stats replies in English;
+  - raw Markdown in the report.
+- **Next / open:**
+  - Ido may revoke @TrackBiteBot's token;
+  - decide whether the full coach report (~3 messages) should be shorter.
+
 ## Recently Completed (2026-08-08)
 
 ### Exercise calories now read from RunCoach
@@ -17,7 +29,7 @@
 
 ### Stage 3.5 — Templates, Barcode, Photos
 - **Barcode Scanning** — `/barcode` command: send photo of barcode → pyzbar decodes → Open Food Facts lookup → log meal with nutrition
-- **Meal Templates** — Save full meals from dashboard, `/template` or `/t` in Telegram to log instantly
+- **Meal Templates** — Save full meals from dashboard, `תבנית` / `/t` in the WhatsApp group to log instantly
 - **Meal Photos in Dashboard** — Signed URLs from Supabase Storage, thumbnails in meal list
 - **Personal Foods in Add Meal** — Dashboard "My Foods" tab in Add Meal modal for quick re-use
 - **DB Schema** — `coach_reports`, `meal_templates`, `meal_template_items` tables created
@@ -28,7 +40,7 @@
 
 ### Personal Foods — Deeper Integration
 - [ ] Auto-save confirmed meals to `personal_foods` (currently relies on photo flow only)
-- [ ] `/foods` Telegram command to list/delete personal foods
+- [ ] A `/foods` command (WhatsApp: `מאכלים`) to list/delete personal foods
 - [ ] Priority lookup in `/add` — check personal_foods before calling AI
 
 ### Dashboard Enhancements
@@ -46,7 +58,7 @@
 ## Stage 4 Ideas (Future)
 
 - **Garmin sync** — Import heart rate, steps, calories burned
-- **Meal reminders** — Telegram notifications if no meal logged by certain time
+- **Meal reminders** — ✅ done: WhatsApp nudges at 11:00/14:00/19:30 if that meal isn't logged
 - **Photo improvements** — Thumbnail generation, image compression
 - **Weekly trends chart** — Visual weight/calorie trend in dashboard
 - **Export** — CSV/PDF export of meal history
