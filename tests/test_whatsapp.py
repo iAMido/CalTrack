@@ -12,7 +12,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 for k, v in {"TELEGRAM_BOT_TOKEN": "1:x", "TELEGRAM_ALLOWED_CHAT_ID": "555",
              "SUPABASE_URL": "http://localhost", "SUPABASE_KEY": "x",
              "WA_TOKEN": "t" * 40}.items():
-    os.environ.setdefault(k, v)
+    # Forced, not setdefault (2026-10-20): inside the live container the REAL
+    # WA_TOKEN / chat id are set, and two tests then failed on auth/dedupe.
+    # This process only ever talks to the fakes below.
+    os.environ[k] = v
 
 from telegram import InlineKeyboardButton as B, InlineKeyboardMarkup as M  # noqa: E402
 
