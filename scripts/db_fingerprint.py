@@ -3,6 +3,7 @@ table. Run before and after a QA run; any difference = something was written.
 
   python scripts/db_fingerprint.py > before.json   ...   python scripts/db_fingerprint.py > after.json
 """
+import hashlib
 import json
 import os
 import sys
@@ -22,7 +23,7 @@ for t in TABLES:
     try:
         r = c.table(t).select("*", count="exact").limit(1).execute()
         rows = c.table(t).select("*").limit(1000).execute().data
-        fp[t] = {"count": r.count, "digest": hash(json.dumps(sorted(rows, key=lambda x: str(x.get("id"))), sort_keys=True, default=str)) % 10**12}
+        fp[t] = {"count": r.count, "digest": hashlib.md5(json.dumps(sorted(rows, key=lambda x: str(x.get("id"))), sort_keys=True, default=str).encode()).hexdigest()[:12]}
     except Exception as e:  # noqa: BLE001
         fp[t] = {"error": str(e)[:60]}
 print(json.dumps(fp, sort_keys=True))
