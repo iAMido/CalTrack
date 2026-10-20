@@ -58,11 +58,12 @@ async def weekly_calibration_job(context) -> None:
         result = await recalibrate(trigger="weekly_auto")
         msg = format_calibration_message(result)
         await wa.notify(msg)
-        await context.bot.send_message(
-            chat_id=config.telegram_allowed_chat_id,
-            text=msg,
-            parse_mode="Markdown",
-        )
+        if config.telegram_enabled:
+            await context.bot.send_message(
+                chat_id=config.telegram_allowed_chat_id,
+                text=msg,
+                parse_mode="Markdown",
+            )
         logger.info("Weekly calibration completed.")
     except Exception as e:
         logger.error(f"Weekly calibration job failed: {e}")
@@ -79,7 +80,7 @@ async def weekly_coach_job(context) -> None:
 
         report = await run_weekly_coach(profile["id"])
         await wa.notify(report)
-        chunks = split_for_telegram(report)
+        chunks = split_for_telegram(report) if config.telegram_enabled else []
         for chunk in chunks:
             await context.bot.send_message(
                 chat_id=config.telegram_allowed_chat_id,
@@ -188,8 +189,38 @@ def main() -> None:
     # Inline keyboard callbacks
     app.add_handler(CallbackQueryHandler(handle_callback))
 
+    if not config.telegram_enabled:
+        asyncio.run(run_without_telegram(app))
+        return
     logger.info(f"Starting CalTrack bot (chat_id: {config.telegram_allowed_chat_id})")
     app.run_polling(drop_pending_updates=True)
+
+
+async def run_without_telegram(app: Application) -> None:
+    """WhatsApp only (TELEGRAM_ENABLED=false): the same post_init (caches, the
+    job queue with nudges and weekly reports, the WhatsApp listener), but no
+    Telegram polling — run_polling is what would start the updater."""
+    import signal
+
+    stop = asyncio.Event()
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        try:
+            loop.add_signal_handler(sig, stop.set)
+        except NotImplementedError:      # Windows dev box
+            pass
+    await app.initialize()
+    await post_init(app)
+    await app.start()
+    logger.info("CalTrack running WhatsApp-only (TELEGRAM_ENABLED=false): no Telegram polling.")
+    try:
+        await stop.wait()
+    finally:
+        runner = app.bot_data.get("wa_runner")
+        if runner is not None:
+            await runner.cleanup()
+        await app.stop()
+        await app.shutdown()
 
 
 if __name__ == "__main__":
