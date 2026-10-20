@@ -262,8 +262,12 @@ async def handle_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     if update.effective_chat.id not in ALLOWED_CHAT_IDS:
         return
 
-    text = await translate((update.message.text or "").strip())
+    raw = (update.message.text or "").strip()
+    text = await translate(raw)
     pending = context.user_data.get("pending_meal")
+    # Deep QA 2026-10-20: after 🔄 / ➕ the card showed "Turkey breast", "White
+    # rice". The typed (Hebrew) words are the display name; English is for lookup.
+    raw_is_he = any("\u0590" <= ch <= "\u05ff" for ch in raw)
 
     # --- Rename existing item ---
     if "awaiting_rename_item" in context.user_data:
@@ -289,7 +293,7 @@ async def handle_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
         pending["items"][idx].update({
             "ingredient_name": new_name,
-            "ingredient_name_he": new_name,
+            "ingredient_name_he": raw if raw_is_he else new_name,
             "fdc_id": fdc_id,
             "ai_fallback": ai_fallback,
             **nut,
@@ -363,9 +367,12 @@ async def handle_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         if not fdc_id:
             ai_fallback = await nut_service.estimate_nutrition_text(name)
 
+        raw_name = name
+        if raw_is_he:
+            raw_name = (raw.rsplit(",", 1)[0] if "," in raw else raw.rsplit(None, 1)[0]).strip() or name
         new_item = {
             "ingredient_name": name,
-            "ingredient_name_he": name,
+            "ingredient_name_he": raw_name,
             "fdc_id": fdc_id,
             "ai_fallback": ai_fallback,
             "weight_grams": grams,

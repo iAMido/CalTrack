@@ -18,10 +18,23 @@ def _headers() -> dict:
     return {"Authorization": f"Bearer {config.wa_token}"}
 
 
+_MD_HEADING = re.compile(r"^#{1,6}\s+(.+?)\s*#*\s*$", re.MULTILINE)
+_MD_BOLD = re.compile(r"\*\*(.+?)\*\*")
+_MD_RULE = re.compile(r"^\s*(?:-{3,}|\*{3,}|_{3,})\s*$\n?", re.MULTILINE)
+
+
+def markdown_to_whatsapp(text: str) -> str:
+    """'## X' → '*X*', '**x**' → '*x*', '---' lines dropped (deep QA 2026-10-20:
+    the weekly coach report arrived with raw Markdown)."""
+    text = _MD_RULE.sub("", text)
+    text = _MD_HEADING.sub(lambda m: "*" + m.group(1).strip("*").strip() + "*", text)
+    return _MD_BOLD.sub(r"*\1*", text)
+
+
 def to_whatsapp(text: str) -> str:
     """Telegram Markdown (v1) → WhatsApp. *bold*, _italic_ and `code` are the
-    same in both; only links differ."""
-    return re.sub(r"\[([^\]]+)\]\((https?://[^)\s]+)\)", r"\1 (\2)", text or "")
+    same in both; links differ, and full Markdown (## / ** / ---) is converted."""
+    return re.sub(r"\[([^\]]+)\]\((https?://[^)\s]+)\)", r"\1 (\2)", markdown_to_whatsapp(text or ""))
 
 
 def split(text: str, max_len: int = MAX_CHUNK) -> list[str]:

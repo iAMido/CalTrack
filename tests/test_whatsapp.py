@@ -352,6 +352,60 @@ def test_no_telegram_left():
     assert not any(m == "telegram" or m.startswith("telegram.") for m in sys.modules)
 
 
+def test_photo_wait_does_not_swallow_commands():
+    """Deep QA 2026-10-20: after "ברקוד" CalTrack waited for a photo and every
+    plain command ("מצב") was silently swallowed."""
+    rec = Rec()
+    rec.install()
+    import bot.handlers.commands as c
+    got = []
+
+    async def fake_status(update, context):
+        got.append("status")
+
+    real = c.handle_status
+    c.handle_status = fake_status
+    try:
+        d = server.Dispatcher()
+        d.session.user_data["waiting_for"] = "barcode"
+        run(d.text("בננה"))                                    # not a command: a reminder, the wait stays
+        assert rec.texts[-1].startswith("📷 מחכה לתמונה של הברקוד") and d.session.user_data.get("waiting_for") == "barcode"
+        run(d.text("מצב"))                                     # a command: runs, the wait ends
+        assert got == ["status"] and "waiting_for" not in d.session.user_data
+        d.session.user_data["awaiting_label_photo"] = True
+        run(d.text("מצב"))
+        assert got == ["status", "status"] and "awaiting_label_photo" not in d.session.user_data
+    finally:
+        c.handle_status = real
+
+
+def test_barcode_label_stats_in_hebrew():
+    import re
+
+    from bot.whatsapp.he import he_text
+
+    def no_english(t):
+        left = re.sub(r"`[^`]*`|BMR|TDEE|AI|CalTrack|[A-Za-z]+@", "", t)
+        return not re.search(r"[A-Za-z]{3,}", left), left
+
+    for en in ["📷 Send me a clear photo of the product barcode (EAN/UPC).",
+               "📷 Send a photo of the nutrition label and I'll extract the macros.\nMake sure the *per 100g* column is clearly visible.",
+               "🔎 Looking up barcode `7290000066318`…",
+               "✅ Logged *Milk 3%* (200 g) — *120 kcal*",
+               "🔧 *System Stats*\n\n⚖️ Weight: 91.5 kg\n🎯 Target: 81.0 kg\n🍽 Daily target: 2308 kcal\n📅 Last calibration: 2026-10-18"]:
+        he = he_text(en)
+        ok, left = no_english(he.replace("Milk", "").replace("BMR", "").replace("TDEE", ""))
+        assert ok, f"English left in {he!r}: {left!r}"
+
+
+def test_markdown_report_becomes_whatsapp():
+    """The weekly coach report arrived with raw '#', '##', '**', '---'."""
+    md = "# 🎉 דוח שבועי\n## 📊 סיכום\n**שיפור** ניכר\n---\nשורה"
+    out = gateway.to_whatsapp(md)
+    assert out == "*🎉 דוח שבועי*\n*📊 סיכום*\n*שיפור* ניכר\nשורה", out
+    assert gateway.to_whatsapp("*כבר* תקין · [קישור](https://a.b/c)") == "*כבר* תקין · קישור (https://a.b/c)"
+
+
 if __name__ == "__main__":
     fails = 0
     for name, fn in list(globals().items()):
