@@ -1,7 +1,16 @@
-# bot/handlers/ — Telegram Update Handlers
+# bot/handlers/ — feature handlers (called by the WhatsApp adapter)
+
+> **Current truth (2026-10-20): CalTrack is WhatsApp-only. There is no Telegram bot any more.**
+> Ido logs meals in the WhatsApp group "CalTrack". TARS's wa-gateway posts it to `bot/whatsapp/server.py`
+> (127.0.0.1:8093). `bot/runner.py` runs the scheduler (nudges 11:00/14:00/19:30, calibration Sun 20:00,
+> coach Sat 22:00) and the listener. `python-telegram-bot` is removed (CalTrack #18–#21); the handlers
+> use `bot/ui.py` for buttons, which `bot/whatsapp/shim.py` turns into WhatsApp polls.
+> Anything below that says Telegram, `/commands` via BotFather, `TELEGRAM_*` or polling is **history**.
+> Smoke test after any change: `scripts/wa_smoke.py` (fake gateway, never writes).
+
 
 ## What This Is
-One file per category of Telegram update. Handlers apply auth checks, delegate to services, and reply to the user.
+One file per feature (written for Telegram; since 2026-10-20 called only through `bot/whatsapp/shim.py`). Handlers apply auth checks, delegate to services, and reply to the user.
 
 ## Files & Status
 | File | Handles | Status |

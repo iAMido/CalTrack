@@ -1,10 +1,19 @@
 # CalTrack — Main Project
 
+> **Current truth (2026-10-20): CalTrack is WhatsApp-only. There is no Telegram bot any more.**
+> Ido logs meals in the WhatsApp group "CalTrack". TARS's wa-gateway posts it to `bot/whatsapp/server.py`
+> (127.0.0.1:8093). `bot/runner.py` runs the scheduler (nudges 11:00/14:00/19:30, calibration Sun 20:00,
+> coach Sat 22:00) and the listener. `python-telegram-bot` is removed (CalTrack #18–#21); the handlers
+> use `bot/ui.py` for buttons, which `bot/whatsapp/shim.py` turns into WhatsApp polls.
+> Anything below that says Telegram, `/commands` via BotFather, `TELEGRAM_*` or polling is **history**.
+> Smoke test after any change: `scripts/wa_smoke.py` (fake gateway, never writes).
+
+
 ## What This Is
-A single-user, privacy-first calorie tracking system. Photograph meals via Telegram, AI identifies the food, confirm weights, and the system tracks calories + macros automatically. Weekly AI coaching reports in Hebrew.
+A single-user, privacy-first calorie tracking system. Photograph meals in the WhatsApp group "CalTrack", AI identifies the food, confirm weights, and the system tracks calories + macros automatically. Weekly AI coaching reports in Hebrew.
 
 ## Architecture Overview
-- **Input**: Telegram Bot (`bot/`) — photo → OpenRouter Vision AI → inline keyboard confirmation
+- **Input**: WhatsApp group "CalTrack" (`bot/whatsapp/`, via TARS's wa-gateway) — photo → OpenRouter Vision AI → Hebrew card + poll (✅ save / ✏️ / 🔄 / ➕ / ❌). Typed text = food (`הוסף`). Hebrew command words (`סיכום`, `מצב`, `משקל`…)
 - **Input**: Freeform `/add` command — Hebrew text → AI breakdown → nutrition calculation
 - **Input**: `/barcode` command — photo → pyzbar decode → Open Food Facts API → save meal
 - **Input**: `/template` command — one-tap re-logging from saved meal templates
@@ -19,7 +28,7 @@ A single-user, privacy-first calorie tracking system. Photograph meals via Teleg
 ## Directory Map
 ```
 caltrack/
-├── bot/            # Telegram bot — core application
+├── bot/            # the application (WhatsApp only; runner.py starts it)
 │   ├── handlers/   # photo.py, commands.py, callbacks.py, admin.py, label.py,
 │   │               # barcode.py, template.py
 │   ├── services/   # vision.py, nutrition.py, personal_foods.py, calibration.py,
@@ -59,7 +68,7 @@ caltrack/
 | 4 — Extras | Garmin sync, reminders, photo improvements | 📋 Future |
 
 ## Dashboard (Next.js — lives in running-coach repo)
-The CalTrack web dashboard is at `C:\Users\ido\running-coach\app\caltrack\`. It connects to the same Supabase database as the Telegram bot.
+The CalTrack web dashboard is at `C:\Users\ido\running-coach\app\caltrack\`. It connects to the same Supabase database as the bot.
 
 **Dashboard pages:**
 - `/caltrack` — Overview: today's calories/macros, weight chart, weekly averages
@@ -102,8 +111,8 @@ python -m bot.main
 ## Environment Variables (.env)
 | Variable | Purpose |
 |----------|---------|
-| `TELEGRAM_BOT_TOKEN` | Bot token from @BotFather |
-| `TELEGRAM_ALLOWED_CHAT_ID` | Your Telegram user ID (single-user auth) |
+| ~~`TELEGRAM_BOT_TOKEN`~~ / ~~`TELEGRAM_ALLOWED_CHAT_ID`~~ | **Removed 2026-10-20**: ignored if still present |
+| `WA_TOKEN` | Shared secret with TARS's wa-gateway (≥ 32 chars) |
 | `OPENROUTER_API_KEY` | OpenRouter key for Vision AI + Coach + translation |
 | `OPENROUTER_VISION_MODEL` | e.g. `openai/gpt-4o` |
 | `OPENROUTER_COACH_MODEL` | e.g. `anthropic/claude-sonnet-4-5` |
@@ -148,12 +157,14 @@ ssh tars-vps "cd ~/caltrack && ./deploy.sh"   # pull, rebuild, restart
 (`~/tars/scripts/tars-backup.sh`), which runs hourly to Backblaze B2. That file is
 the only CalTrack state not in Supabase or git.
 
-**Dependency rule:** `python-telegram-bot==21.3` requires `httpx~=0.27`. Use
-`supabase>=2.7.0` — older supabase pins httpx<0.26 and causes a build conflict.
+**Dependency rule:** `httpx==0.27.2` and `APScheduler==3.10.4` are pinned in
+requirements.txt (the versions python-telegram-bot used to pull in; supabase 2.9
+needs httpx < 0.28). Don't add python-telegram-bot back: `tests/test_whatsapp.py`
+fails if anything imports `telegram`.
 
-**Important:** Only one bot instance can poll Telegram at a time. Running locally
-while the container is up causes a 409 Conflict. Run `docker compose down` on the
-box first, or don't run locally.
+**Running locally:** the listener binds 127.0.0.1:8093 and the gateway is on the
+VPS, so locally only the tests and `scripts/wa_smoke.py` (in the image) make sense.
+(History: before 2026-10-20 two instances polling Telegram caused a 409 Conflict.)
 
 **Restart semantics — `docker kill` is not a crash test.** Docker flags any
 `docker kill`/`docker stop` as a *manual* stop, and `restart: unless-stopped`
@@ -166,13 +177,13 @@ ssh tars-vps 'sudo kill -9 $(docker inspect caltrack --format "{{.State.Pid}}")'
 Then confirm `RestartCount` incremented.
 
 ## Security
-- Telegram: all updates checked against `TELEGRAM_ALLOWED_CHAT_ID`
+- WhatsApp: only the "CalTrack" group, Ido only. The gateway filters senders; the endpoint checks the bearer `WA_TOKEN`
 - Supabase: service_role key kept in `.env` (gitignored) locally and in
   `/etc/caltrack/caltrack.env` (`root:tars 0640`) in production — never committed
 - Photos stored in private Supabase Storage bucket `meals` (no public URLs)
 - Host firewall denies all inbound except `22/tcp` and the tailnet. CalTrack needs
   no inbound ports; if a change appears to require one, something is wrong.
-- **`httpx` logging is pinned to WARNING in `bot/main.py`.** Telegram embeds the
-  bot token in the URL path, and `httpx` logs full URLs at INFO — leaving it at
+- **`httpx` logging is pinned to WARNING in `bot/main.py`.** (Originally because Telegram embedded the
+  bot token in the URL path; and `httpx` logs full URLs at INFO — leaving it at
   INFO writes the token to disk in cleartext every ~10 seconds. Do not revert this
   to INFO for debugging without redacting.

@@ -17,7 +17,7 @@ Do NOT chain `.on_conflict()` — that method does not exist in supabase-py.
 ## Supabase Tables
 | Table | Purpose |
 |-------|---------|
-| `user_profile` | Single row — biometrics, goals, Telegram chat ID |
+| `user_profile` | Single row — biometrics, goals, `telegram_chat_id` (a legacy column, unused since 2026-10-20) |
 | `usda_foundation` | 8,156 USDA foods + custom label-scanned foods (fdc_id ≥ 9,000,000) |
 | `meals` | One row per eating event |
 | `meal_items` | Individual ingredients within a meal |

@@ -1,6 +1,15 @@
 # bot/
 
-The core Telegram bot application.
+> **Current truth (2026-10-20): CalTrack is WhatsApp-only. There is no Telegram bot any more.**
+> Ido logs meals in the WhatsApp group "CalTrack". TARS's wa-gateway posts it to `bot/whatsapp/server.py`
+> (127.0.0.1:8093). `bot/runner.py` runs the scheduler (nudges 11:00/14:00/19:30, calibration Sun 20:00,
+> coach Sat 22:00) and the listener. `python-telegram-bot` is removed (CalTrack #18–#21); the handlers
+> use `bot/ui.py` for buttons, which `bot/whatsapp/shim.py` turns into WhatsApp polls.
+> Anything below that says Telegram, `/commands` via BotFather, `TELEGRAM_*` or polling is **history**.
+> Smoke test after any change: `scripts/wa_smoke.py` (fake gateway, never writes).
+
+
+The CalTrack application (WhatsApp only since 2026-10-20).
 
 ## Entry Point
 
@@ -13,7 +22,7 @@ python -m bot.main
 ```
 bot/
 ├── main.py          # Application entry point — registers all handlers and starts polling
-├── handlers/        # Telegram update handlers (one file per feature area)
+├── handlers/        # feature handlers, called by the WhatsApp adapter
 ├── services/        # Business logic (AI, nutrition, learning engine)
 ├── db/              # Database layer (Supabase client + queries)
 └── utils/           # Shared utilities (config, formatters, calculators)
@@ -53,5 +62,5 @@ bot/
 | File | Responsibility |
 |------|---------------|
 | `config.py` | All settings loaded from `.env` via pydantic-settings |
-| `formatters.py` | Telegram message formatting helpers, `detect_meal_type` |
+| `formatters.py` | Message formatting helpers (bot/ui.py buttons), `detect_meal_type` |
 | `met_calculator.py` | MET-based calorie burn calculation for runs |
