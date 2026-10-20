@@ -44,7 +44,10 @@ caltrack/
 ```
 
 ## Key Files
-- `bot/main.py` — entry point: `python -m bot.main`
+- `bot/main.py` — entry point: `python -m bot.main` → `bot/runner.py`; also the weekly calibration/coach jobs
+- `bot/runner.py` — WhatsApp-only start-up: APScheduler (nudges 11:00/14:00/19:30, calibration Sun 20:00, coach Sat 22:00) + the WhatsApp listener
+- `bot/ui.py` — button/type shapes the handlers use (replaced python-telegram-bot on 20/10)
+- `bot/whatsapp/` — the transport: endpoint, Telegram-shaped adapter, Hebrew cards/rewrites, gateway client (see its CLAUDE.md)
 - `bot/utils/config.py` — all config loaded from `.env` via pydantic-settings
 - `bot/db/supabase_client.py` — Supabase REST helpers (insert/upsert/select/update)
 - `bot/db/queries.py` — higher-level queries; paginates USDA load (8k+ rows)
@@ -58,6 +61,8 @@ caltrack/
 - `bot/handlers/template.py` — `/template` command: one-tap logging from saved templates
 - `scripts/import_usda.py` — imports Foundation Foods + SR Legacy + FNDDS (any available)
 - `scripts/schema_stage3.sql` — DDL for coach_reports, meal_templates, meal_template_items
+- `scripts/wa_smoke.py`, `scripts/wa_deep_qa.py`, `scripts/db_fingerprint.py` — QA (nothing sent, nothing written)
+- `docs/QA-2026-10-20.md` — the full QA record after removing Telegram (method, results, fixes, how to re-run)
 - `.env` — local secrets (gitignored)
 
 ## Development Stages
@@ -69,6 +74,7 @@ caltrack/
 | 3 — AI Coach | Weekly Hebrew report, BMR calibration, coach reports saved to DB | ✅ Complete |
 | 3.5 — Templates & Barcode | /template command, /barcode command, meal photos in dashboard, personal foods in Add Meal | ✅ Complete |
 | 4 — Extras | Garmin sync, reminders, photo improvements | 📋 Future |
+| 5 — WhatsApp | The "CalTrack" WhatsApp group (15/10); **Telegram removed 20/10** (CalTrack #17–#24); deep QA + fixes (`docs/QA-2026-10-20.md`) | ✅ Complete |
 
 ## Dashboard (Next.js — lives in running-coach repo)
 The CalTrack web dashboard is at `C:\Users\ido\running-coach\app\caltrack\`. It connects to the same Supabase database as the bot.

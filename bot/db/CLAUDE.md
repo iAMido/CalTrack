@@ -1,5 +1,8 @@
 # bot/db/ — Database Layer
 
+> **20/10/2026:** CalTrack is WhatsApp-only (no Telegram). See `bot/whatsapp/CLAUDE.md` and `docs/QA-2026-10-20.md` (the full QA record).
+
+
 ## What This Is
 All Supabase access lives here. Uses `supabase-py` (sync client wrapped in async functions).
 
@@ -40,3 +43,9 @@ Created via SQL: `INSERT INTO storage.buckets (id, name, public) VALUES ('meals'
 - `get_all_usda_foods()` paginates in 1,000-row batches (Supabase REST default limit)
 - `refresh_daily_summary()` recalculates from scratch on every save
 - All timestamps: TIMESTAMPTZ (UTC in DB), converted to `Asia/Jerusalem` in app layer
+
+## Testing against the real database (20/10/2026)
+There's one production database. QA reads it but must never write:
+- `scripts/wa_deep_qa.py` `install_write_guard()` replaces `insert/upsert/update/delete_row/upload_photo` and wraps `get_client()`, so `.table(...).insert/update/upsert/delete` and Storage uploads are **recorded, not executed**; selects pass through.
+- `scripts/db_fingerprint.py`: row count + md5 of 14 tables; run before and after, and identical means nothing was written.
+- The writes the QA observed per flow are listed in `docs/QA-2026-10-20.md` § 3.

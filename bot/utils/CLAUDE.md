@@ -1,5 +1,8 @@
 # bot/utils/ — Shared Utilities
 
+> **20/10/2026:** CalTrack is WhatsApp-only (no Telegram). See `bot/whatsapp/CLAUDE.md` and `docs/QA-2026-10-20.md` (the full QA record).
+
+
 ## What This Is
 Stateless helper modules used across handlers, services, and scripts.
 
@@ -9,6 +12,7 @@ Stateless helper modules used across handlers, services, and scripts.
 | `config.py` | pydantic-settings BaseSettings — loads all `.env` vars, typed access via `config.*` |
 | `formatters.py` | Builds the meal keyboard (bot/ui.py buttons → WhatsApp polls) and message text |
 | `met_calculator.py` | MET-based calorie burn for runs when device data unavailable |
+| `../ui.py` (in `bot/`) | `InlineKeyboardButton(text, callback_data)`, `InlineKeyboardMarkup(rows)`, `Update`/`ContextTypes` hints; the WhatsApp adapter reads `.inline_keyboard`, `.text`, `.callback_data` |
 
 ## config.py — Key Fields
 ```python

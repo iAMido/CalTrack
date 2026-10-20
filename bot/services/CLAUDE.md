@@ -1,5 +1,8 @@
 # bot/services/ — Business Logic
 
+> **20/10/2026:** CalTrack is WhatsApp-only (no Telegram). See `bot/whatsapp/CLAUDE.md` and `docs/QA-2026-10-20.md` (the full QA record).
+
+
 ## What This Is
 Pure Python business logic, independent of the chat transport. Each service is a module of async functions called from handlers.
 
@@ -12,7 +15,8 @@ Pure Python business logic, independent of the chat transport. Each service is a
 | `personal_foods.py` | Per-food history, auto-approve logic, correction logging | ✅ |
 | `calibration.py` | BMR/TDEE recalculation (Mifflin-St Jeor), calibration_log | ✅ |
 | `daily_summary.py` | Aggregate today's meals + runs + water + weight | ✅ |
-| `coach.py` | Weekly AI Coach: 7-day data → OpenRouter → Hebrew report | 📋 Stage 3 |
+| `coach.py` | Weekly AI Coach: 7-day data → OpenRouter → Hebrew report, saved to `coach_reports` | ✅ |
+| `nudge.py` | 11:00/14:00/19:30 "not logged yet" nudges (only if that meal is missing), sent on WhatsApp | ✅ |
 
 ## vision.py — Two Prompts
 **VISION_SYSTEM_PROMPT** (meal photos):
@@ -42,3 +46,9 @@ All three must be true:
 1. `total_times_logged >= 5` for this `meal_type`
 2. `correction_rate < 20%`
 3. `weight_std_dev < 30g` across last 5 logs
+
+## coach.py: report length (20/10/2026)
+- `max_tokens: 9000`. With 3500, **every report since September was cut mid-sentence** at ~4,950 chars (Hebrew uses many tokens).
+- If `finish_reason == "length"`, a warning is logged ("AI Coach report was cut by max_tokens").
+- A full report is ~10,500 chars, sent as ~3 WhatsApp messages (`gateway.split`). Markdown is converted for WhatsApp by `gateway.to_whatsapp`.
+- `run_weekly_coach` **writes** a `coach_reports` row and upserts `daily_summary`: never call it in a test without the write guard (`scripts/wa_deep_qa.py`).
