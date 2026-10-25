@@ -305,15 +305,26 @@ def test_hebrew_command_words():
 
 
 def test_runner_schedules_the_same_jobs_without_telegram():
-    """bot/runner.py (20/10): the PTB JobQueue's jobs, same times, own scheduler."""
+    """bot/runner.py (20/10): the PTB JobQueue's jobs, same times, own scheduler.
+
+    25/10: two jobs added when the Saturday report was split up — recipes moved
+    to their own Thursday message, and the weigh-in request became a Sunday
+    reminder instead of a paragraph the report repeated every week.
+    """
     from bot.runner import build_scheduler
 
     sched = build_scheduler()
     jobs = {j.id: str(j.trigger) for j in sched.get_jobs()}
-    assert set(jobs) == {"nudge_breakfast", "nudge_lunch", "nudge_dinner", "weekly_calibration", "weekly_coach"}
+    assert set(jobs) == {"nudge_breakfast", "nudge_lunch", "nudge_dinner",
+                         "nudge_weigh_in", "weekly_calibration", "weekly_coach",
+                         "weekly_recipes"}
     assert "hour='11'" in jobs["nudge_breakfast"] and "minute='30'" in jobs["nudge_dinner"]
     assert "day_of_week='sun'" in jobs["weekly_calibration"] and "hour='20'" in jobs["weekly_calibration"]
     assert "day_of_week='sat'" in jobs["weekly_coach"] and "hour='22'" in jobs["weekly_coach"]
+    # Thursday, not Saturday: the coach report fires Sat 22:00, after the shop.
+    assert "day_of_week='thu'" in jobs["weekly_recipes"] and "hour='9'" in jobs["weekly_recipes"]
+    # Sunday morning, so the weigh-in can actually happen that morning.
+    assert "day_of_week='sun'" in jobs["nudge_weigh_in"] and "hour='8'" in jobs["nudge_weigh_in"]
 
 
 def test_nudge_goes_to_whatsapp():
