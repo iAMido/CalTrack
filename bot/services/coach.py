@@ -75,6 +75,31 @@ def _previous_week_boundaries(sunday_str: str) -> tuple[str, str]:
     return prev_sun.strftime("%Y-%m-%d"), prev_sat.strftime("%Y-%m-%d")
 
 
+def _empty_day_bucket() -> dict:
+    """Zeroed daily aggregate. `burn` lives here so a run on a day with no meals
+    still produces a row — otherwise that day keeps a stale or absent exercise
+    figure and the weekly deficit is computed against 0."""
+    return {"cal": 0, "p": 0.0, "c": 0.0, "f": 0.0, "fib": 0.0, "n": 0, "burn": 0}
+
+
+def _local_date(value, tz) -> str | None:
+    """UTC timestamp from Supabase -> Israel-local YYYY-MM-DD, or None if unparseable.
+
+    Shared by the meal and run loops below so both bucket by exactly the same
+    rule. A run at 00:30 local and a meal at 00:30 local must land on the same
+    date, or the weekly totals disagree with themselves.
+    """
+    if not value:
+        return None
+    try:
+        dt = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        dt = pytz.utc.localize(dt)
+    return dt.astimezone(tz).strftime("%Y-%m-%d")
+
+
 async def _rebuild_daily_summaries_for_window(
     user_id: str, start_date: str, end_date: str
 ) -> None:
@@ -101,30 +126,43 @@ async def _rebuild_daily_summaries_for_window(
         )
         meals = meals_resp.data or []
 
+        # Exercise calories. This query is the whole point of the fix: without
+        # it the upsert below writes rows with calories_burned_exercise unset,
+        # which lands at the column default (0) and makes the coach believe no
+        # exercise happened — even while it is separately handed the run list.
+        runs_resp = (
+            client.table("caltrack_runs")
+            .select("run_date,calories_burned")
+            .eq("user_id", user_id)
+            .gte("run_date", start_utc)
+            .lte("run_date", end_utc)
+            .execute()
+        )
+        runs = runs_resp.data or []
+
         tz = pytz.timezone(config.user_timezone)
         by_date: dict[str, dict] = {}
         for m in meals:
-            eaten_at = m.get("eaten_at")
-            if not eaten_at:
+            d = _local_date(m.get("eaten_at"), tz)
+            if d is None or d < start_date or d > end_date:
                 continue
-            try:
-                # Normalise to aware datetime in Israel TZ
-                dt = datetime.fromisoformat(str(eaten_at).replace("Z", "+00:00"))
-                dt_local = dt.astimezone(tz)
-            except Exception:
-                continue
-            d = dt_local.strftime("%Y-%m-%d")
-            if d < start_date or d > end_date:
-                continue
-            bucket = by_date.setdefault(d, {
-                "cal": 0, "p": 0.0, "c": 0.0, "f": 0.0, "fib": 0.0, "n": 0,
-            })
+            bucket = by_date.setdefault(d, _empty_day_bucket())
             bucket["cal"] += m.get("total_calories") or 0
             bucket["p"]   += float(m.get("total_protein_g") or 0)
             bucket["c"]   += float(m.get("total_carbs_g") or 0)
             bucket["f"]   += float(m.get("total_fat_g") or 0)
             bucket["fib"] += float(m.get("total_fiber_g") or 0)
             bucket["n"]   += 1
+
+        for r in runs:
+            d = _local_date(r.get("run_date"), tz)
+            if d is None or d < start_date or d > end_date:
+                continue
+            # setdefault, not a lookup: a run on a day with no logged meals
+            # must still create its row.
+            by_date.setdefault(d, _empty_day_bucket())["burn"] += (
+                r.get("calories_burned") or 0
+            )
 
         # Upsert one row per date. Uses (user_id, date) conflict resolution.
         for d, agg in by_date.items():
@@ -137,6 +175,7 @@ async def _rebuild_daily_summaries_for_window(
                 "total_fat_g": round(agg["f"], 1),
                 "total_fiber_g": round(agg["fib"], 1),
                 "meal_count": agg["n"],
+                "calories_burned_exercise": agg["burn"],
             }, on_conflict="user_id,date")
         logger.info(
             f"Rebuilt daily_summary for {len(by_date)} day(s) "
@@ -347,13 +386,17 @@ def _summarise_week(start_date: str, end_date: str, summaries: list[dict]) -> di
     w_start = next((s.get("weight_kg") for s in sorted_s if s.get("weight_kg")), None)
     w_end = next((s.get("weight_kg") for s in reversed(sorted_s) if s.get("weight_kg")), None)
     delta = round(w_end - w_start, 2) if (w_start and w_end) else None
-    days = len(summaries)
+    # Count days the user actually logged FOOD, not rows present. The rebuild
+    # now also creates rows for days with a run but no meals, so len(summaries)
+    # would both overstate "days tracked" and dilute the intake average with
+    # zero-calorie days — corrupting the week-over-week comparison.
+    food_days = sum(1 for s in summaries if (s.get("meal_count") or 0) > 0)
     return {
         "week_start": start_date,
         "week_end": end_date,
-        "days_with_data": days,
+        "days_with_data": food_days,
         "total_calories_in": cal,
-        "avg_daily_calories": round(cal / days) if days else 0,
+        "avg_daily_calories": round(cal / food_days) if food_days else 0,
         "total_protein_g": round(pro, 1),
         "total_carbs_g": round(car, 1),
         "total_fat_g": round(fat, 1),
