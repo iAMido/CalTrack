@@ -9,6 +9,32 @@ def _today_str() -> str:
     return datetime.now(tz).strftime("%Y-%m-%d")
 
 
+def _local_day_bounds(date_str: str) -> tuple[str, str]:
+    """UTC ISO bounds for one Israel-local calendar day: (start, end).
+
+    PostgREST compares a naive timestamp string in the database session's
+    timezone, which on Supabase is UTC. So filtering eaten_at between
+    "2026-10-25T00:00:00" and "2026-10-25T23:59:59" selected UTC midnight to
+    UTC midnight — three hours late in IDT. A meal logged at 01:00 local was
+    counted on the PREVIOUS day, and one logged at 01:00 the next morning was
+    counted as today. The coach's own rebuild buckets by local date correctly,
+    so /summary and the weekly report disagreed for exactly those meals.
+
+    Note tz.localize(), never day.replace(tzinfo=tz): pytz tzinfo objects carry
+    the zone's 1880s LMT offset (Jerusalem +02:21) until localize() picks the
+    right one for the date.
+
+    DST-safe by construction: start and end are localized independently, so on
+    a transition day the window is the real 23 or 25 hours rather than a fixed
+    24.
+    """
+    tz = pytz.timezone(config.user_timezone)
+    day = datetime.strptime(date_str, "%Y-%m-%d")
+    start = tz.localize(day)
+    end = tz.localize(day.replace(hour=23, minute=59, second=59, microsecond=999999))
+    return start.astimezone(pytz.utc).isoformat(), end.astimezone(pytz.utc).isoformat()
+
+
 async def get_user_profile() -> dict | None:
     rows = await db.select("user_profile", limit=1)
     return rows[0] if rows else None
@@ -16,12 +42,13 @@ async def get_user_profile() -> dict | None:
 
 async def get_today_meals(user_id: str | None = None) -> list[dict]:
     today = _today_str()
+    _day_start, _day_end = _local_day_bounds(today)
     client = db.get_client()
     query = (
         client.table("meals")
         .select("*")
-        .gte("eaten_at", f"{today}T00:00:00")
-        .lte("eaten_at", f"{today}T23:59:59")
+        .gte("eaten_at", _day_start)
+        .lte("eaten_at", _day_end)
         .eq("status", "confirmed")
         .order("eaten_at", desc=False)
     )
@@ -55,7 +82,12 @@ async def refresh_daily_summary(date_str: str, user_id: str) -> dict:
     Every sub-query is filtered by user_id — previously they were not, which
     was harmless on the single-user instance but would leak between users
     the moment a second profile existed.
+
+    `date_str` is an Israel-local calendar date (callers derive it from
+    datetime.now(tz)), so the query windows are built from it rather than
+    compared as naive strings — see _local_day_bounds.
     """
+    day_start, day_end = _local_day_bounds(date_str)
     client = db.get_client()
 
     # Sum meals
@@ -63,8 +95,8 @@ async def refresh_daily_summary(date_str: str, user_id: str) -> dict:
         client.table("meals")
         .select("total_calories,total_protein_g,total_carbs_g,total_fat_g,total_fiber_g,meal_type")
         .eq("user_id", user_id)
-        .gte("eaten_at", f"{date_str}T00:00:00")
-        .lte("eaten_at", f"{date_str}T23:59:59")
+        .gte("eaten_at", day_start)
+        .lte("eaten_at", day_end)
         .eq("status", "confirmed")
         .execute()
     )
@@ -81,8 +113,8 @@ async def refresh_daily_summary(date_str: str, user_id: str) -> dict:
         client.table("caltrack_runs")
         .select("calories_burned")
         .eq("user_id", user_id)
-        .gte("run_date", f"{date_str}T00:00:00")
-        .lte("run_date", f"{date_str}T23:59:59")
+        .gte("run_date", day_start)
+        .lte("run_date", day_end)
         .execute()
     )
     runs = runs_result.data or []
@@ -93,8 +125,8 @@ async def refresh_daily_summary(date_str: str, user_id: str) -> dict:
         client.table("weight_log")
         .select("weight_kg")
         .eq("user_id", user_id)
-        .gte("measured_at", f"{date_str}T00:00:00")
-        .lte("measured_at", f"{date_str}T23:59:59")
+        .gte("measured_at", day_start)
+        .lte("measured_at", day_end)
         .order("measured_at", desc=True)
         .limit(1)
         .execute()
@@ -106,8 +138,8 @@ async def refresh_daily_summary(date_str: str, user_id: str) -> dict:
         client.table("water_log")
         .select("amount_ml")
         .eq("user_id", user_id)
-        .gte("logged_at", f"{date_str}T00:00:00")
-        .lte("logged_at", f"{date_str}T23:59:59")
+        .gte("logged_at", day_start)
+        .lte("logged_at", day_end)
         .execute()
     )
     water_ml = sum(w.get("amount_ml", 0) for w in (water_result.data or []))
