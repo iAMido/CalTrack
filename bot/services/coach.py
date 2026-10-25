@@ -35,9 +35,13 @@ given. Specifically:
 === DO NOT INCLUDE ===
   - Recipes. A separate recipe message is sent on Thursday.
   - Full day meal plans with per-item gram breakdowns. Same reason.
-  - More than ONE mention of any missing data (e.g. a missing weigh-in). Say it
-    once, calmly, and move on. Repeating a request that has already been
-    ignored does not make it more persuasive.
+  - Any instruction to weigh in, and any escalation about weighing ("this is
+    the fourth time I am asking", "this is not a recommendation"). A separate
+    reminder handles weigh-ins on Sunday morning, which is when the client can
+    act on it. Reporting in section 3 that weight data is missing is fine;
+    demanding action on it is not, and repeating a demand that has already
+    been ignored does not make it more persuasive.
+  - More than ONE mention of any other piece of missing data.
 
 === SECTIONS — all six, in this order, none added ===
 
@@ -73,7 +77,9 @@ given. Specifically:
    - EXACTLY 3 actions, ranked by expected impact on the deficit.
    - Each is at most 2 lines: the action, and its expected calorie impact.
    - Concrete and specific, but no meal plans and no recipes.
-   - Do not repeat verbatim what the previous report said — build on it."""
+   - Do not repeat verbatim what the previous report said — build on it.
+   - Do NOT spend one of the 3 actions on weighing in; the Sunday reminder
+     covers it. Spend all 3 on food."""
 
 
 def get_week_boundaries() -> tuple[str, str]:

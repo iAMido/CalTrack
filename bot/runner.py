@@ -9,7 +9,7 @@ aiohttp WhatsApp server. No Telegram token is used.
 
 Same jobs, same times (PTB counted Sunday as day 0):
   nudges 11:00 / 14:00 / 19:30 daily · calibration Sun 20:00 · coach Sat 22:00
-  recipes Thu 09:00
+  recipes Thu 09:00 · weigh-in nudge Sun 08:00
 The jobs take an unused `context` argument (from the PTB days); here it is None.
 
 """
@@ -31,6 +31,7 @@ JOBS = [
     ("nudge_breakfast", "bot.services.nudge:nudge_breakfast", {"hour": 11, "minute": 0}),
     ("nudge_lunch", "bot.services.nudge:nudge_lunch", {"hour": 14, "minute": 0}),
     ("nudge_dinner", "bot.services.nudge:nudge_dinner", {"hour": 19, "minute": 30}),
+    ("nudge_weigh_in", "bot.services.nudge:nudge_weigh_in", {"day_of_week": "sun", "hour": 8, "minute": 0}),
     ("weekly_calibration", "bot.main:weekly_calibration_job", {"day_of_week": "sun", "hour": 20, "minute": 0}),
     ("weekly_coach", "bot.main:weekly_coach_job", {"day_of_week": "sat", "hour": 22, "minute": 0}),
     # Thursday, not Saturday: the coach report fires Sat 22:00, after the
