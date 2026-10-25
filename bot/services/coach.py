@@ -12,49 +12,74 @@ COACH_SYSTEM_PROMPT = """You are an experienced clinical dietitian analyzing a c
 Your goal is to help the client maintain a consistent calorie deficit for healthy weight loss.
 
 IMPORTANT: Perform ALL analysis, reasoning, and calculations in English internally.
-Produce ONLY the final output summary in Hebrew.
-Structure it clearly with emoji headers, bullet points, and specific numbers.
+Produce ONLY the final output in Hebrew.
 Be direct and honest — if the client overate, say so clearly.
 
-YOUR REPORT MUST INCLUDE THESE SECTIONS:
+=== LENGTH — HARD LIMIT ===
+The entire report MUST fit in ONE WhatsApp message: under 3500 characters,
+target 400-450 words. A report longer than that does not get read, which makes
+it worthless however good the analysis is. If you are running long, cut
+explanation and justification — never cut the numbers.
 
-1. 📊 סיכום שבועי (Weekly Summary)
-   - Average daily calorie intake vs target
-   - Average daily net (intake - exercise)
-   - Total deficit/surplus for the week
-   - Is the client on track for their weekly weight loss goal?
+=== NO REPETITION — THE MOST IMPORTANT RULE ===
+State each number EXACTLY ONCE, in the section where it belongs, then refer
+back to it without restating it. Never re-derive evidence you have already
+given. Specifically:
+  - Do NOT restate the weekly average in the macro, pattern, adherence or
+    recommendation sections. It belongs in section 1 only.
+  - Do NOT justify a recommendation by repeating the data that motivated it.
+    One short clause of "why" is enough.
+  - Do NOT write a closing summary section. The report is short enough to read
+    whole; a summary is a third restatement of the same facts.
 
-2. 💪 מאקרו (Macro Balance)
-   - Average protein/carbs/fat split (grams and %)
-   - Is protein sufficient for muscle preservation? (target: 1.6-2.0g per kg body weight)
-   - Fiber intake vs 25g/day target
+=== DO NOT INCLUDE ===
+  - Recipes. A separate recipe message is sent on Thursday.
+  - Full day meal plans with per-item gram breakdowns. Same reason.
+  - Any instruction to weigh in, and any escalation about weighing ("this is
+    the fourth time I am asking", "this is not a recommendation"). A separate
+    reminder handles weigh-ins on Sunday morning, which is when the client can
+    act on it. Reporting in section 3 that weight data is missing is fine;
+    demanding action on it is not, and repeating a demand that has already
+    been ignored does not make it more persuasive.
+  - More than ONE mention of any other piece of missing data.
 
-3. 📈 מגמת משקל (Weight Trend)
-   - Weight change this week
-   - Compare to last week using PREVIOUS_WEEK_SUMMARY block (do NOT make up numbers)
+=== SECTIONS — all six, in this order, none added ===
 
-4. 🔍 דפוסים (Pattern Detection)
-   - Late-night eating patterns
-   - Weekend vs weekday differences
-   - Post-exercise eating (overcompensation?)
-   - Recurring high-calorie, low-nutrient foods (cross-reference TOP_FOODS_LAST_4W)
+1. 📊 סיכום שבועי
+   - Average daily intake vs target
+   - Average daily NET (intake − exercise). Exercise calories come from the
+     data given to you; trust them.
+   - Total deficit/surplus for the week, and whether that is on track
+   Max 5 bullets.
 
-5. 🎯 מעקב אחר ההמלצות הקודמות (Previous Week Adherence)
-   - Read PREVIOUS_COACH_REPORT. For each of the previous report's 3 action items, grade adherence:
-     ✅ followed, ⚠️ partial, ❌ ignored. Cite specific evidence from this week's data.
-   - If there is no previous report, skip this section.
+2. 💪 מאקרו
+   - Protein in g/kg bodyweight vs the 1.6-2.0 g/kg target
+   - Carb/fat split, fiber vs 25g/day
+   Max 4 bullets. No per-day breakdown.
 
-6. ✅ המלצות לשבוע הבא (3 Action Items)
-   - Exactly 3 specific, actionable recommendations
-   - Ranked by expected impact on deficit
-   - Include specific calorie numbers
-   - Do NOT repeat verbatim what was in the previous report — build on it
+3. 📈 מגמת משקל
+   - Weight change this week, using PREVIOUS_WEEK_SUMMARY. Do NOT invent numbers.
+   - If there is no weight data, say so in ONE line and move on.
+   Max 3 bullets.
 
-7. 🍽 מתכונים מומלצים (2 Recipe Suggestions)
-   - Match the client's TOP_FOODS_LAST_4W preferences
-   - High protein, moderate calorie
-   - Simple to prepare (< 30 min)
-   - Include estimated calories and macros per serving"""
+4. 🔍 דפוסים
+   - EXACTLY 3 patterns, the 3 most actionable. Not 3 good and 3 bad — 3 total.
+   - Draw on timing, weekday/weekend, post-exercise eating, and recurring
+     low-nutrient foods (cross-reference TOP_FOODS_LAST_4W).
+   - One line each.
+
+5. 🎯 מעקב אחר ההמלצות הקודמות
+   - Read PREVIOUS_COACH_REPORT. For each of its 3 action items, ONE line:
+     ✅ / ⚠️ / ❌ plus at most 10 words. No evidence, no numbers, no explanation.
+   - Skip this section entirely if there is no previous report.
+
+6. ✅ המלצות לשבוע הבא
+   - EXACTLY 3 actions, ranked by expected impact on the deficit.
+   - Each is at most 2 lines: the action, and its expected calorie impact.
+   - Concrete and specific, but no meal plans and no recipes.
+   - Do not repeat verbatim what the previous report said — build on it.
+   - Do NOT spend one of the 3 actions on weighing in; the Sunday reminder
+     covers it. Spend all 3 on food."""
 
 
 def get_week_boundaries() -> tuple[str, str]:
@@ -73,6 +98,31 @@ def _previous_week_boundaries(sunday_str: str) -> tuple[str, str]:
     prev_sat = sunday - timedelta(days=1)
     prev_sun = prev_sat - timedelta(days=6)
     return prev_sun.strftime("%Y-%m-%d"), prev_sat.strftime("%Y-%m-%d")
+
+
+def _empty_day_bucket() -> dict:
+    """Zeroed daily aggregate. `burn` lives here so a run on a day with no meals
+    still produces a row — otherwise that day keeps a stale or absent exercise
+    figure and the weekly deficit is computed against 0."""
+    return {"cal": 0, "p": 0.0, "c": 0.0, "f": 0.0, "fib": 0.0, "n": 0, "burn": 0}
+
+
+def _local_date(value, tz) -> str | None:
+    """UTC timestamp from Supabase -> Israel-local YYYY-MM-DD, or None if unparseable.
+
+    Shared by the meal and run loops below so both bucket by exactly the same
+    rule. A run at 00:30 local and a meal at 00:30 local must land on the same
+    date, or the weekly totals disagree with themselves.
+    """
+    if not value:
+        return None
+    try:
+        dt = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        dt = pytz.utc.localize(dt)
+    return dt.astimezone(tz).strftime("%Y-%m-%d")
 
 
 async def _rebuild_daily_summaries_for_window(
@@ -101,30 +151,43 @@ async def _rebuild_daily_summaries_for_window(
         )
         meals = meals_resp.data or []
 
+        # Exercise calories. This query is the whole point of the fix: without
+        # it the upsert below writes rows with calories_burned_exercise unset,
+        # which lands at the column default (0) and makes the coach believe no
+        # exercise happened — even while it is separately handed the run list.
+        runs_resp = (
+            client.table("caltrack_runs")
+            .select("run_date,calories_burned")
+            .eq("user_id", user_id)
+            .gte("run_date", start_utc)
+            .lte("run_date", end_utc)
+            .execute()
+        )
+        runs = runs_resp.data or []
+
         tz = pytz.timezone(config.user_timezone)
         by_date: dict[str, dict] = {}
         for m in meals:
-            eaten_at = m.get("eaten_at")
-            if not eaten_at:
+            d = _local_date(m.get("eaten_at"), tz)
+            if d is None or d < start_date or d > end_date:
                 continue
-            try:
-                # Normalise to aware datetime in Israel TZ
-                dt = datetime.fromisoformat(str(eaten_at).replace("Z", "+00:00"))
-                dt_local = dt.astimezone(tz)
-            except Exception:
-                continue
-            d = dt_local.strftime("%Y-%m-%d")
-            if d < start_date or d > end_date:
-                continue
-            bucket = by_date.setdefault(d, {
-                "cal": 0, "p": 0.0, "c": 0.0, "f": 0.0, "fib": 0.0, "n": 0,
-            })
+            bucket = by_date.setdefault(d, _empty_day_bucket())
             bucket["cal"] += m.get("total_calories") or 0
             bucket["p"]   += float(m.get("total_protein_g") or 0)
             bucket["c"]   += float(m.get("total_carbs_g") or 0)
             bucket["f"]   += float(m.get("total_fat_g") or 0)
             bucket["fib"] += float(m.get("total_fiber_g") or 0)
             bucket["n"]   += 1
+
+        for r in runs:
+            d = _local_date(r.get("run_date"), tz)
+            if d is None or d < start_date or d > end_date:
+                continue
+            # setdefault, not a lookup: a run on a day with no logged meals
+            # must still create its row.
+            by_date.setdefault(d, _empty_day_bucket())["burn"] += (
+                r.get("calories_burned") or 0
+            )
 
         # Upsert one row per date. Uses (user_id, date) conflict resolution.
         for d, agg in by_date.items():
@@ -137,6 +200,7 @@ async def _rebuild_daily_summaries_for_window(
                 "total_fat_g": round(agg["f"], 1),
                 "total_fiber_g": round(agg["fib"], 1),
                 "meal_count": agg["n"],
+                "calories_burned_exercise": agg["burn"],
             }, on_conflict="user_id,date")
         logger.info(
             f"Rebuilt daily_summary for {len(by_date)} day(s) "
@@ -347,13 +411,17 @@ def _summarise_week(start_date: str, end_date: str, summaries: list[dict]) -> di
     w_start = next((s.get("weight_kg") for s in sorted_s if s.get("weight_kg")), None)
     w_end = next((s.get("weight_kg") for s in reversed(sorted_s) if s.get("weight_kg")), None)
     delta = round(w_end - w_start, 2) if (w_start and w_end) else None
-    days = len(summaries)
+    # Count days the user actually logged FOOD, not rows present. The rebuild
+    # now also creates rows for days with a run but no meals, so len(summaries)
+    # would both overstate "days tracked" and dilute the intake average with
+    # zero-calorie days — corrupting the week-over-week comparison.
+    food_days = sum(1 for s in summaries if (s.get("meal_count") or 0) > 0)
     return {
         "week_start": start_date,
         "week_end": end_date,
-        "days_with_data": days,
+        "days_with_data": food_days,
         "total_calories_in": cal,
-        "avg_daily_calories": round(cal / days) if days else 0,
+        "avg_daily_calories": round(cal / food_days) if food_days else 0,
         "total_protein_g": round(pro, 1),
         "total_carbs_g": round(car, 1),
         "total_fat_g": round(fat, 1),
