@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 import pytz
 from bot.utils.config import config
 from bot.db import supabase_client as db
+from bot.utils.meals import assign_eating_occasions, count_eating_occasions
 
 logger = logging.getLogger(__name__)
 
@@ -104,7 +105,7 @@ def _empty_day_bucket() -> dict:
     """Zeroed daily aggregate. `burn` lives here so a run on a day with no meals
     still produces a row — otherwise that day keeps a stale or absent exercise
     figure and the weekly deficit is computed against 0."""
-    return {"cal": 0, "p": 0.0, "c": 0.0, "f": 0.0, "fib": 0.0, "n": 0, "burn": 0}
+    return {"cal": 0, "p": 0.0, "c": 0.0, "f": 0.0, "fib": 0.0, "times": [], "burn": 0}
 
 
 def _local_date(value, tz) -> str | None:
@@ -177,7 +178,7 @@ async def _rebuild_daily_summaries_for_window(
             bucket["c"]   += float(m.get("total_carbs_g") or 0)
             bucket["f"]   += float(m.get("total_fat_g") or 0)
             bucket["fib"] += float(m.get("total_fiber_g") or 0)
-            bucket["n"]   += 1
+            bucket["times"].append(m.get("eaten_at"))
 
         for r in runs:
             d = _local_date(r.get("run_date"), tz)
@@ -199,7 +200,8 @@ async def _rebuild_daily_summaries_for_window(
                 "total_carbs_g": round(agg["c"], 1),
                 "total_fat_g": round(agg["f"], 1),
                 "total_fiber_g": round(agg["fib"], 1),
-                "meal_count": agg["n"],
+                # Eating occasions, not rows — see bot/utils/meals.py.
+                "meal_count": count_eating_occasions(agg["times"]),
                 "calories_burned_exercise": agg["burn"],
             }, on_conflict="user_id,date")
         logger.info(
@@ -367,7 +369,10 @@ async def gather_weekly_data(user_id: str, sunday_str: str, saturday_str: str) -
     top_foods = await _top_foods_last_4w(user_id, saturday_str)
 
     return {
-        "meals": meals,
+        # Tagged, not merged: the prompt is given meal_count (occasions) AND
+        # these rows. Untagged, 4 vs 5 would be two contradictory facts and the
+        # model would invent a reason for the difference.
+        "meals": assign_eating_occasions(meals),
         "meal_items": meal_items,
         "runs": runs,
         "weight_log": weights,
@@ -505,7 +510,12 @@ TOP_FOODS_LAST_4W (use for pattern detection + recipe matching):
 DAILY SUMMARIES (this week, per day):
 {json.dumps(weekly_data['daily_summaries'], indent=2, default=str)}
 
-MEALS ({len(weekly_data['meals'])} total):
+MEALS ({len(weekly_data['meals'])} rows, grouped into eating occasions by the
+"occasion" field — rows sharing an occasion are ONE meal logged in several
+messages, e.g. a plate at 14:00 and what was added at 14:20. meal_count in the
+summaries counts occasions, not rows, so it will be lower than this number.
+Treat one occasion as one meal; never describe the extra rows as separate
+meals or as the client eating more often than he does):
 {json.dumps(weekly_data['meals'], indent=2, default=str)}
 
 {meal_items_block}

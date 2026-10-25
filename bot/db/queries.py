@@ -2,6 +2,7 @@ from datetime import datetime, date
 import pytz
 from bot.db import supabase_client as db
 from bot.utils.config import config
+from bot.utils.meals import count_eating_occasions
 
 
 def _today_str() -> str:
@@ -93,7 +94,7 @@ async def refresh_daily_summary(date_str: str, user_id: str) -> dict:
     # Sum meals
     meals_result = (
         client.table("meals")
-        .select("total_calories,total_protein_g,total_carbs_g,total_fat_g,total_fiber_g,meal_type")
+        .select("eaten_at,total_calories,total_protein_g,total_carbs_g,total_fat_g,total_fiber_g,meal_type")
         .eq("user_id", user_id)
         .gte("eaten_at", day_start)
         .lte("eaten_at", day_end)
@@ -158,7 +159,9 @@ async def refresh_daily_summary(date_str: str, user_id: str) -> dict:
         "total_carbs_g": round(carbs, 2),
         "total_fat_g": round(fat, 2),
         "total_fiber_g": round(fiber, 2),
-        "meal_count": len(meals),
+        # Eating occasions, not rows: a plate at 14:00 and the extras at 14:20
+        # are one meal logged twice. See bot/utils/meals.py.
+        "meal_count": count_eating_occasions(m.get("eaten_at") for m in meals),
         "calories_burned_exercise": burned,
         "bmr_calories": bmr,
         "tdee_calories": tdee,
