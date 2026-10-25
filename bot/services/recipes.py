@@ -132,7 +132,13 @@ async def weekly_recipes_job(context=None) -> None:
         if not profile:
             logger.warning("Weekly recipes: no user profile found.")
             return
-        await wa.notify(await build_recipes_message(profile["id"]))
-        logger.info("Weekly recipes message sent.")
+        text = await build_recipes_message(profile["id"])
+        await wa.notify(text)
+        # The coach report is persisted to coach_reports; this message is not
+        # stored anywhere, so without this line there is no record of what was
+        # actually sent and the output cannot be reviewed after the fact.
+        # Recipes contain nothing sensitive, and docker-compose caps the log at
+        # 10MB x 5.
+        logger.info("Weekly recipes message sent (%d chars):\n%s", len(text), text)
     except Exception as e:
         logger.error(f"Weekly recipes job failed: {e}")
